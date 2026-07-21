@@ -1,0 +1,2 @@
+ALTER TABLE public.shop_entries DROP CONSTRAINT IF EXISTS shop_entries_entry_type_check;
+ALTER TABLE public.shop_entries ADD CONSTRAINT shop_entries_entry_type_check CHECK ((entry_type = ANY (ARRAY['sale'::text, 'purchase'::text, 'withdraw'::text, 'expense'::text])));

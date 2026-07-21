@@ -55,6 +55,10 @@ class WholesaleCubit extends Cubit<WholesaleState> {
     required String name,
     required String mobile,
     required double openingDue,
+    String? address,
+    String? vatNumber,
+    String? notes,
+    double creditLimit = 0.0,
   }) async {
     try {
       final customer = WholesaleCustomerModel(
@@ -62,9 +66,33 @@ class WholesaleCubit extends Cubit<WholesaleState> {
         name: name,
         mobile: mobile,
         openingDue: openingDue,
+        address: address,
+        vatNumber: vatNumber,
+        notes: notes,
+        creditLimit: creditLimit,
         createdAt: DateTime.now(),
       );
       await wholesaleRepo.saveCustomer(customer);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> updateCustomer(WholesaleCustomerModel customer) async {
+    try {
+      await wholesaleRepo.saveCustomer(customer);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> deleteCustomer(String customerId) async {
+    try {
+      final existing = state.customers.firstWhere((c) => c.id == customerId);
+      final updated = existing.copyWith(isDeleted: true);
+      await wholesaleRepo.saveCustomer(updated);
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -280,6 +308,9 @@ class WholesaleCubit extends Cubit<WholesaleState> {
     String? nameAr,
     String? nameBn,
     int sortOrder = 0,
+    bool isActive = true,
+    String? imageUrl,
+    String? smartSection,
   }) async {
     try {
       final cat = WholesaleCategoryModel(
@@ -288,6 +319,9 @@ class WholesaleCubit extends Cubit<WholesaleState> {
         nameAr: nameAr,
         nameBn: nameBn,
         sortOrder: sortOrder,
+        isActive: isActive,
+        imageUrl: imageUrl,
+        smartSection: smartSection,
       );
       await wholesaleRepo.saveCategory(cat);
       await loadAllData();
@@ -301,6 +335,87 @@ class WholesaleCubit extends Cubit<WholesaleState> {
     try {
       final product = state.products.firstWhere((p) => p.id == productId);
       await productRepo.updateStock(productId, product.stock + adjustment);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  // --- Transaction Update & Delete Actions ---
+  Future<void> updateSale(WholesaleSaleModel sale) async {
+    try {
+      await wholesaleRepo.saveSale(sale);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> deleteSale(String saleId) async {
+    try {
+      final sale = state.sales.firstWhere((s) => s.id == saleId);
+      final updated = sale.copyWith(isDeleted: true);
+      await wholesaleRepo.saveSale(updated);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> updatePurchase(WholesalePurchaseModel purchase) async {
+    try {
+      await wholesaleRepo.savePurchase(purchase);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> deletePurchase(String purchaseId) async {
+    try {
+      final purchase = state.purchases.firstWhere((p) => p.id == purchaseId);
+      final updated = purchase.copyWith(isDeleted: true);
+      await wholesaleRepo.savePurchase(updated);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> updatePayment(WholesalePaymentModel payment) async {
+    try {
+      await wholesaleRepo.savePayment(payment);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> deletePayment(String paymentId) async {
+    try {
+      final payment = state.payments.firstWhere((p) => p.id == paymentId);
+      final updated = payment.copyWith(isDeleted: true);
+      await wholesaleRepo.savePayment(updated);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> updateOrder(WholesaleOrderModel order) async {
+    try {
+      await wholesaleRepo.saveOrder(order);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> deleteOrder(String orderId) async {
+    try {
+      final order = state.orders.firstWhere((o) => o.id == orderId);
+      final updated = order.copyWith(isDeleted: true);
+      await wholesaleRepo.saveOrder(updated);
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));

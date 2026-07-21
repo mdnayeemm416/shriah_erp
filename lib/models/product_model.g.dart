@@ -30,13 +30,21 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       imageUrl: fields[10] as String?,
       isDeleted: fields[11] as bool,
       createdAt: fields[12] as DateTime,
+      comparePrice: fields[13] as double?,
+      taxRate: (fields[14] as double?) ?? 15.0,
+      description: fields[15] as String?,
+      categoryIds: (fields[16] as List?)?.cast<String>(),
+      isVisibleOnWebsite: (fields[17] as bool?) ?? true,
+      isFeatured: (fields[18] as bool?) ?? false,
+      showStock: (fields[19] as bool?) ?? true,
+      images: (fields[20] as List?)?.cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, ProductModel obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(21)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -62,7 +70,23 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       ..writeByte(11)
       ..write(obj.isDeleted)
       ..writeByte(12)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(13)
+      ..write(obj.comparePrice)
+      ..writeByte(14)
+      ..write(obj.taxRate)
+      ..writeByte(15)
+      ..write(obj.description)
+      ..writeByte(16)
+      ..write(obj.categoryIds)
+      ..writeByte(17)
+      ..write(obj.isVisibleOnWebsite)
+      ..writeByte(18)
+      ..write(obj.isFeatured)
+      ..writeByte(19)
+      ..write(obj.showStock)
+      ..writeByte(20)
+      ..write(obj.images);
   }
 
   @override

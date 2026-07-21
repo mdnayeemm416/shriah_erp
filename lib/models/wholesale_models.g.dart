@@ -366,13 +366,15 @@ class WholesaleCategoryModelAdapter
       nameBn: fields[3] as String?,
       sortOrder: fields[4] as int,
       isActive: fields[5] as bool,
+      imageUrl: fields[6] as String?,
+      smartSection: fields[7] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, WholesaleCategoryModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -384,7 +386,11 @@ class WholesaleCategoryModelAdapter
       ..writeByte(4)
       ..write(obj.sortOrder)
       ..writeByte(5)
-      ..write(obj.isActive);
+      ..write(obj.isActive)
+      ..writeByte(6)
+      ..write(obj.imageUrl)
+      ..writeByte(7)
+      ..write(obj.smartSection);
   }
 
   @override

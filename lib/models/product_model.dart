@@ -43,6 +43,30 @@ class ProductModel extends HiveObject {
   @HiveField(12)
   final DateTime createdAt;
 
+  @HiveField(13)
+  final double? comparePrice;
+
+  @HiveField(14)
+  final double? taxRate;
+
+  @HiveField(15)
+  final String? description;
+
+  @HiveField(16)
+  final List<String>? categoryIds;
+
+  @HiveField(17)
+  final bool isVisibleOnWebsite;
+
+  @HiveField(18)
+  final bool isFeatured;
+
+  @HiveField(19)
+  final bool showStock;
+
+  @HiveField(20)
+  final List<String>? images;
+
   ProductModel({
     required this.id,
     required this.name,
@@ -57,6 +81,14 @@ class ProductModel extends HiveObject {
     this.imageUrl,
     this.isDeleted = false,
     required this.createdAt,
+    this.comparePrice,
+    this.taxRate = 15.0,
+    this.description,
+    this.categoryIds,
+    this.isVisibleOnWebsite = true,
+    this.isFeatured = false,
+    this.showStock = true,
+    this.images,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -76,6 +108,14 @@ class ProductModel extends HiveObject {
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at'] as String) 
           : DateTime.now(),
+      comparePrice: (json['compare_price'] as num?)?.toDouble(),
+      taxRate: (json['tax_rate'] as num? ?? 15.0).toDouble(),
+      description: json['description'] as String?,
+      categoryIds: (json['category_ids'] as List?)?.cast<String>(),
+      isVisibleOnWebsite: json['is_visible_on_website'] as bool? ?? true,
+      isFeatured: json['is_featured'] as bool? ?? false,
+      showStock: json['show_stock'] as bool? ?? true,
+      images: (json['images'] as List?)?.cast<String>(),
     );
   }
 
@@ -94,6 +134,14 @@ class ProductModel extends HiveObject {
       'image_url': imageUrl,
       'is_deleted': isDeleted,
       'created_at': createdAt.toIso8601String(),
+      'compare_price': comparePrice,
+      'tax_rate': taxRate,
+      'description': description,
+      'category_ids': categoryIds,
+      'is_visible_on_website': isVisibleOnWebsite,
+      'is_featured': isFeatured,
+      'show_stock': showStock,
+      'images': images,
     };
   }
 
@@ -109,6 +157,14 @@ class ProductModel extends HiveObject {
     double? minStock,
     String? imageUrl,
     bool? isDeleted,
+    double? comparePrice,
+    double? taxRate,
+    String? description,
+    List<String>? categoryIds,
+    bool? isVisibleOnWebsite,
+    bool? isFeatured,
+    bool? showStock,
+    List<String>? images,
   }) {
     return ProductModel(
       id: id,
@@ -124,6 +180,14 @@ class ProductModel extends HiveObject {
       imageUrl: imageUrl ?? this.imageUrl,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt,
+      comparePrice: comparePrice ?? this.comparePrice,
+      taxRate: taxRate ?? this.taxRate,
+      description: description ?? this.description,
+      categoryIds: categoryIds ?? this.categoryIds,
+      isVisibleOnWebsite: isVisibleOnWebsite ?? this.isVisibleOnWebsite,
+      isFeatured: isFeatured ?? this.isFeatured,
+      showStock: showStock ?? this.showStock,
+      images: images ?? this.images,
     );
   }
 }

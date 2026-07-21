@@ -1,0 +1,1 @@
+import{u as r,j as t,N as s}from"./index-DXhm_e6C.js";function a(){const e=r();return e.loading?t.jsx("div",{className:"py-12 text-center text-sm text-muted-foreground",children:"Loading…"}):t.jsx(s,{to:e.primaryRoute,replace:!0})}export{a as component};

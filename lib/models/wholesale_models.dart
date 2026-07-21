@@ -25,6 +25,18 @@ class WholesaleCustomerModel extends HiveObject {
   @HiveField(6)
   final DateTime createdAt;
 
+  @HiveField(7)
+  final String? address;
+
+  @HiveField(8)
+  final String? vatNumber;
+
+  @HiveField(9)
+  final String? notes;
+
+  @HiveField(10)
+  final double creditLimit;
+
   WholesaleCustomerModel({
     required this.id,
     required this.name,
@@ -33,6 +45,10 @@ class WholesaleCustomerModel extends HiveObject {
     this.isActive = true,
     this.isDeleted = false,
     required this.createdAt,
+    this.address,
+    this.vatNumber,
+    this.notes,
+    this.creditLimit = 0.0,
   });
 
   WholesaleCustomerModel copyWith({
@@ -41,6 +57,10 @@ class WholesaleCustomerModel extends HiveObject {
     double? openingDue,
     bool? isActive,
     bool? isDeleted,
+    String? address,
+    String? vatNumber,
+    String? notes,
+    double? creditLimit,
   }) {
     return WholesaleCustomerModel(
       id: id,
@@ -50,6 +70,10 @@ class WholesaleCustomerModel extends HiveObject {
       isActive: isActive ?? this.isActive,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt,
+      address: address ?? this.address,
+      vatNumber: vatNumber ?? this.vatNumber,
+      notes: notes ?? this.notes,
+      creditLimit: creditLimit ?? this.creditLimit,
     );
   }
 }
@@ -394,6 +418,12 @@ class WholesaleCategoryModel extends HiveObject {
   @HiveField(5)
   final bool isActive;
 
+  @HiveField(6)
+  final String? imageUrl;
+
+  @HiveField(7)
+  final String? smartSection;
+
   WholesaleCategoryModel({
     required this.id,
     required this.name,
@@ -401,6 +431,8 @@ class WholesaleCategoryModel extends HiveObject {
     this.nameBn,
     this.sortOrder = 0,
     this.isActive = true,
+    this.imageUrl,
+    this.smartSection,
   });
 
   WholesaleCategoryModel copyWith({
@@ -409,6 +441,8 @@ class WholesaleCategoryModel extends HiveObject {
     String? nameBn,
     int? sortOrder,
     bool? isActive,
+    String? imageUrl,
+    String? smartSection,
   }) {
     return WholesaleCategoryModel(
       id: id,
@@ -417,6 +451,8 @@ class WholesaleCategoryModel extends HiveObject {
       nameBn: nameBn ?? this.nameBn,
       sortOrder: sortOrder ?? this.sortOrder,
       isActive: isActive ?? this.isActive,
+      imageUrl: imageUrl ?? this.imageUrl,
+      smartSection: smartSection ?? this.smartSection,
     );
   }
 }
