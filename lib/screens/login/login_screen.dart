@@ -52,6 +52,17 @@ class _LoginScreenState extends State<LoginScreen> {
               transitionDuration: const Duration(milliseconds: 500),
             ),
           );
+        } else if (state is AuthError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
         }
       },
       child: Scaffold(

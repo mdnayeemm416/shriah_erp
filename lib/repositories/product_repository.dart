@@ -1,9 +1,11 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../core/api/api_client.dart';
 import '../models/product_model.dart';
 
 class ProductRepository {
   static const String _boxName = 'products';
+  final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
     Hive.registerAdapter(ProductModelAdapter());
@@ -54,7 +56,7 @@ class ProductRepository {
         itemCode: 'SAD-1KG',
         price: 26.95,
         purchasePrice: 22.10,
-        stock: 3.0, // Low stock!
+        stock: 3.0,
         minStock: 6.0,
         createdAt: now,
       ),
@@ -67,7 +69,7 @@ class ProductRepository {
         itemCode: 'IND-5P',
         price: 7.50,
         purchasePrice: 6.00,
-        stock: 8.0, // Low stock!
+        stock: 8.0,
         minStock: 10.0,
         createdAt: now,
       ),
@@ -80,20 +82,33 @@ class ProductRepository {
 
   Future<List<ProductModel>> getProducts() async {
     final box = Hive.box<ProductModel>(_boxName);
+    
+    try {
+      final remoteData = await _apiClient.getProducts();
+      if (remoteData != null && remoteData.isNotEmpty) {
+        for (final item in remoteData) {
+          if (item is Map<String, dynamic>) {
+            final p = ProductModel.fromJson(item);
+            await box.put(p.id, p);
+          }
+        }
+      }
+    } catch (_) {
+      // Remote fetch failed, using local Hive box
+    }
+
     return box.values.where((p) => !p.isDeleted).toList();
   }
 
   Future<List<ProductModel>> getLowStockProducts() async {
-    final box = Hive.box<ProductModel>(_boxName);
-    return box.values
-        .where((p) => !p.isDeleted && p.stock <= p.minStock)
-        .toList();
+    final products = await getProducts();
+    return products.where((p) => p.stock <= p.minStock).toList();
   }
 
   Future<ProductModel?> getProductByBarcode(String barcode) async {
-    final box = Hive.box<ProductModel>(_boxName);
+    final products = await getProducts();
     try {
-      return box.values.firstWhere((p) => !p.isDeleted && p.barcode == barcode);
+      return products.firstWhere((p) => p.barcode == barcode);
     } catch (_) {
       return null;
     }
@@ -102,13 +117,23 @@ class ProductRepository {
   Future<void> saveProduct(ProductModel product) async {
     final box = Hive.box<ProductModel>(_boxName);
     await box.put(product.id, product);
+
+    try {
+      await _apiClient.createProduct(product.toJson());
+    } catch (_) {
+      // Offline mode, saved locally
+    }
   }
 
   Future<void> updateStock(String id, double newStock) async {
     final box = Hive.box<ProductModel>(_boxName);
     final p = box.get(id);
     if (p != null) {
-      await box.put(id, p.copyWith(stock: newStock));
+      final updated = p.copyWith(stock: newStock);
+      await box.put(id, updated);
+      try {
+        await _apiClient.createProduct(updated.toJson());
+      } catch (_) {}
     }
   }
 

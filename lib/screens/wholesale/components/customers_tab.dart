@@ -6,7 +6,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../models/wholesale_models.dart';
 import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../blocs/wholesale/wholesale_state.dart';
-import 'add_customer_dialog.dart';
 import 'add_party_bottom_sheet.dart';
 import 'customer_statement_dialog.dart';
 import 'payment_in_dialog.dart';

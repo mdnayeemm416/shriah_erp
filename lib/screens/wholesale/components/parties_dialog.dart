@@ -4,7 +4,6 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../blocs/wholesale/wholesale_state.dart';
-import '../../../models/wholesale_models.dart';
 import 'add_party_bottom_sheet.dart';
 
 class PartiesDialog extends StatefulWidget {

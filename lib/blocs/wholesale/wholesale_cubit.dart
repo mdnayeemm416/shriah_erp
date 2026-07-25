@@ -205,6 +205,62 @@ class WholesaleCubit extends Cubit<WholesaleState> {
     }
   }
 
+  Future<void> processSalesReturn({
+    required String? saleId,
+    required String invoiceNumber,
+    required String customerName,
+    required String? customerId,
+    required double refundAmount,
+    required String reason,
+    required String settlementMethod,
+    required List<Map<String, dynamic>> returnItems,
+    String? notes,
+  }) async {
+    try {
+      final salesReturn = WholesaleSalesReturnModel(
+        id: const Uuid().v4(),
+        saleId: saleId,
+        invoiceNumber: invoiceNumber,
+        customerName: customerName,
+        refundAmount: refundAmount,
+        reason: reason,
+        items: returnItems,
+      );
+
+      await wholesaleRepo.createSalesReturn(salesReturn);
+
+      for (final item in returnItems) {
+        final productId = item['product_id'] as String?;
+        final returnQty = (item['return_qty'] as num? ?? 0).toDouble();
+        if (productId != null && returnQty > 0) {
+          final product = state.products.cast<ProductModel?>().firstWhere(
+                (p) => p != null && p.id == productId,
+                orElse: () => null,
+              );
+          if (product != null) {
+            await productRepo.updateStock(productId, product.stock + returnQty);
+          }
+        }
+      }
+
+      if (settlementMethod == 'adjust_due' && customerId != null && refundAmount > 0) {
+        final payment = WholesalePaymentModel(
+          id: const Uuid().v4(),
+          customerId: customerId,
+          amount: refundAmount,
+          kind: 'payment_in',
+          notes: 'Sales Return Credit Adjustment for INV-$invoiceNumber',
+          createdAt: DateTime.now(),
+        );
+        await wholesaleRepo.savePayment(payment);
+      }
+
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
   Future<void> createPurchase({
     required String supplierName,
     required List<WholesaleSaleItemModel> items,

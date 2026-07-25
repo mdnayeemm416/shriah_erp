@@ -1,25 +1,20 @@
 import 'dart:async';
-import 'package:uuid/uuid.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import '../core/api/api_client.dart';
 import '../models/user_model.dart';
 
 class AuthRepository {
   UserModel? _currentUser;
-  
-  // Seed database user profiles
-  final List<UserModel> _users = [
-    UserModel(
-      id: 'admin-id-123',
-      email: 'aahsanuh62@gmail.com',
-      fullName: 'Admin AhsAN',
-      mobile: '+966553687388',
-      username: 'admin',
-      landingPage: '/summary',
-      createdAt: DateTime.now(),
-    ),
-  ];
+  final ApiClient _apiClient = ApiClient();
+  static const String _authBoxName = 'auth';
+
+  UserModel? get currentUser => _currentUser;
+
+  void setCurrentUser(UserModel? user) {
+    _currentUser = user;
+  }
 
   Future<UserModel?> getCurrentUser() async {
-    await Future.delayed(const Duration(milliseconds: 300));
     return _currentUser;
   }
 
@@ -27,31 +22,25 @@ class AuthRepository {
     required String identifier,
     required String password,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    
-    final idClean = identifier.trim().toLowerCase();
-    
-    // Allow any sign-in for simplicity, but if it matches the admin email/username, return the admin user!
-    UserModel? user;
-    try {
-      user = _users.firstWhere(
-        (u) => u.email == idClean || u.username == idClean || u.mobile == idClean,
-      );
-    } catch (_) {
-      // Create a temporary user if not found in list so the user can log in with any credentials in mock mode
-      user = UserModel(
-        id: const Uuid().v4(),
-        email: idClean.contains('@') ? idClean : '$idClean@shriah.com',
-        fullName: 'User ${identifier.split('@')[0]}',
-        username: idClean.split('@')[0],
-        landingPage: '/summary',
-        createdAt: DateTime.now(),
-      );
-      _users.add(user);
-    }
+    final res = await _apiClient.login(
+      identifier: identifier,
+      password: password,
+    );
 
-    _currentUser = user;
-    return user;
+    if (res['success'] == true && res['data'] != null && res['data']['user'] != null) {
+      final userMap = Map<String, dynamic>.from(res['data']['user'] as Map);
+      final user = UserModel.fromJson(userMap);
+      _currentUser = user;
+
+      // Save user profile in Hive box
+      final box = await Hive.openBox(_authBoxName);
+      await box.put('user_profile', user.toJson());
+
+      return user;
+    } else {
+      final errorMsg = res['message'] as String? ?? 'Invalid credentials or server error';
+      throw Exception(errorMsg);
+    }
   }
 
   Future<void> signUp({
@@ -59,21 +48,13 @@ class AuthRepository {
     required String password,
     required String fullName,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    final user = UserModel(
-      id: const Uuid().v4(),
-      email: email.trim().toLowerCase(),
-      fullName: fullName,
-      username: email.split('@')[0],
-      landingPage: '/summary',
-      createdAt: DateTime.now(),
-    );
-    _users.add(user);
-    _currentUser = user;
+    throw Exception('Registration disabled. Please contact system administrator.');
   }
 
   Future<void> signOut() async {
-    await Future.delayed(const Duration(milliseconds: 200));
+    await _apiClient.setToken(null);
     _currentUser = null;
+    final box = await Hive.openBox(_authBoxName);
+    await box.delete('user_profile');
   }
 }

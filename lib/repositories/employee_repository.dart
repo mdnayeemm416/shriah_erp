@@ -1,11 +1,13 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../core/api/api_client.dart';
 import '../models/employee_model.dart';
 import '../models/employee_entry_model.dart';
 
 class EmployeeRepository {
   static const String _employeesBoxName = 'employees';
   static const String _entriesBoxName = 'employee_entries';
+  final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
     Hive.registerAdapter(EmployeeModelAdapter());
@@ -24,7 +26,6 @@ class EmployeeRepository {
   ) async {
     final uuid = const Uuid();
 
-    // 1. Seed Employees
     final emp1 = EmployeeModel(id: 'emp-1', name: 'Faruk Ahmed', shopId: 'shop-1', monthlySalary: 3500.0, createdAt: DateTime.now().subtract(const Duration(days: 60)));
     final emp2 = EmployeeModel(id: 'emp-2', name: 'Mohammad Al-Otaibi', shopId: 'shop-1', monthlySalary: 5500.0, createdAt: DateTime.now().subtract(const Duration(days: 45)));
     final emp3 = EmployeeModel(id: 'emp-3', name: 'Raju Dey', shopId: 'shop-2', monthlySalary: 2800.0, createdAt: DateTime.now().subtract(const Duration(days: 30)));
@@ -35,11 +36,9 @@ class EmployeeRepository {
       emp3.id: emp3,
     });
 
-    // 2. Seed Employee Transactions
     final now = DateTime.now();
     final entries = <EmployeeEntryModel>[];
 
-    // Emp 1 Ledger
     entries.add(EmployeeEntryModel(
       id: uuid.v4(),
       employeeId: 'emp-1',
@@ -62,52 +61,6 @@ class EmployeeRepository {
       createdAt: now.subtract(const Duration(days: 5)),
     ));
 
-    // Emp 2 Ledger
-    entries.add(EmployeeEntryModel(
-      id: uuid.v4(),
-      employeeId: 'emp-2',
-      entryType: 'salary',
-      amount: 5500.0,
-      kind: 'bank',
-      notes: 'Salary transfer',
-      txnDate: now.subtract(const Duration(days: 20)),
-      createdAt: now.subtract(const Duration(days: 20)),
-    ));
-
-    entries.add(EmployeeEntryModel(
-      id: uuid.v4(),
-      employeeId: 'emp-2',
-      entryType: 'expense',
-      amount: 150.0,
-      kind: 'cash',
-      notes: 'Fuel costs for delivery truck',
-      txnDate: now.subtract(const Duration(days: 3)),
-      createdAt: now.subtract(const Duration(days: 3)),
-    ));
-
-    // Emp 3 Ledger
-    entries.add(EmployeeEntryModel(
-      id: uuid.v4(),
-      employeeId: 'emp-3',
-      entryType: 'give',
-      amount: 200.0,
-      kind: 'cash',
-      notes: 'Cash pocket money',
-      txnDate: now.subtract(const Duration(days: 10)),
-      createdAt: now.subtract(const Duration(days: 10)),
-    ));
-
-    entries.add(EmployeeEntryModel(
-      id: uuid.v4(),
-      employeeId: 'emp-3',
-      entryType: 'receive',
-      amount: 50.0,
-      kind: 'cash',
-      notes: 'Refund of remaining advance',
-      txnDate: now.subtract(const Duration(days: 8)),
-      createdAt: now.subtract(const Duration(days: 8)),
-    ));
-
     for (final e in entries) {
       await entriesBox.put(e.id, e);
     }
@@ -116,6 +69,21 @@ class EmployeeRepository {
   // --- CRUD for Employees ---
   Future<List<EmployeeModel>> getEmployees({String? shopId}) async {
     final box = Hive.box<EmployeeModel>(_employeesBoxName);
+    
+    try {
+      final remoteList = await _apiClient.getEmployees();
+      if (remoteList != null && remoteList.isNotEmpty) {
+        for (final item in remoteList) {
+          if (item is Map<String, dynamic>) {
+            final emp = EmployeeModel.fromJson(item);
+            if (emp.id.isNotEmpty) {
+              await box.put(emp.id, emp);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
     var list = box.values.where((e) => !e.isDeleted);
     if (shopId != null) {
       list = list.where((e) => e.shopId == shopId);
@@ -126,6 +94,10 @@ class EmployeeRepository {
   Future<void> saveEmployee(EmployeeModel employee) async {
     final box = Hive.box<EmployeeModel>(_employeesBoxName);
     await box.put(employee.id, employee);
+
+    try {
+      await _apiClient.createEmployee(employee.toJson());
+    } catch (_) {}
   }
 
   // --- CRUD for Entries ---

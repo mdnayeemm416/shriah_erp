@@ -51,6 +51,40 @@ class WholesaleCustomerModel extends HiveObject {
     this.creditLimit = 0.0,
   });
 
+  factory WholesaleCustomerModel.fromJson(Map<String, dynamic> json) {
+    return WholesaleCustomerModel(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? 'Customer',
+      mobile: json['mobile'] as String? ?? '',
+      openingDue: (json['opening_due'] as num? ?? 0.0).toDouble(),
+      creditLimit: (json['credit_limit'] as num? ?? 0.0).toDouble(),
+      address: json['address'] as String?,
+      vatNumber: json['vat_number'] as String?,
+      notes: json['notes'] as String?,
+      isActive: json['is_active'] as bool? ?? true,
+      isDeleted: json['is_deleted'] as bool? ?? false,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'mobile': mobile,
+      'opening_due': openingDue,
+      'credit_limit': creditLimit,
+      'address': address,
+      'vat_number': vatNumber,
+      'notes': notes,
+      'is_active': isActive,
+      'is_deleted': isDeleted,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+
   WholesaleCustomerModel copyWith({
     String? name,
     String? mobile,
@@ -159,7 +193,7 @@ class WholesaleSaleItemModel extends HiveObject {
     return WholesaleSaleItemModel(
       productId: json['product_id'] as String? ?? json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
-      qty: (json['qty'] as num? ?? 1.0).toDouble(),
+      qty: (json['qty'] as num? ?? json['return_qty'] as num? ?? 1.0).toDouble(),
       price: (json['price'] as num? ?? 0.0).toDouble(),
       purchasePrice: (json['purchase_price'] as num? ?? 0.0).toDouble(),
     );
@@ -233,6 +267,58 @@ class WholesaleSaleModel extends HiveObject {
     required this.createdAt,
   });
 
+  factory WholesaleSaleModel.fromJson(Map<String, dynamic> json) {
+    int invNum = 0;
+    if (json['invoice_number'] is int) {
+      invNum = json['invoice_number'] as int;
+    } else if (json['invoice_number'] is String) {
+      invNum = int.tryParse(json['invoice_number'] as String) ?? 0;
+    }
+
+    var itemList = <WholesaleSaleItemModel>[];
+    if (json['items'] is List) {
+      itemList = (json['items'] as List)
+          .map((i) => WholesaleSaleItemModel.fromJson(i as Map<String, dynamic>))
+          .toList();
+    }
+
+    return WholesaleSaleModel(
+      id: json['id'] as String? ?? '',
+      invoiceNumber: invNum,
+      customerId: json['customer_id'] as String?,
+      customerName: json['customer_name'] as String? ?? 'Walk-in',
+      customerMobile: json['customer_mobile'] as String? ?? '',
+      items: itemList,
+      total: (json['total'] as num? ?? 0.0).toDouble(),
+      discount: (json['discount'] as num? ?? 0.0).toDouble(),
+      dueAmount: (json['due_amount'] as num? ?? 0.0).toDouble(),
+      paymentMethod: json['payment_method'] as String? ?? 'cash',
+      status: json['status'] as String? ?? 'completed',
+      isDeleted: json['is_deleted'] as bool? ?? false,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'invoice_number': invoiceNumber,
+      'customer_id': customerId,
+      'customer_name': customerName,
+      'customer_mobile': customerMobile,
+      'items': items.map((i) => i.toJson()).toList(),
+      'total': total,
+      'discount': discount,
+      'due_amount': dueAmount,
+      'payment_method': paymentMethod,
+      'status': status,
+      'is_deleted': isDeleted,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+
   WholesaleSaleModel copyWith({
     int? invoiceNumber,
     String? customerId,
@@ -261,6 +347,50 @@ class WholesaleSaleModel extends HiveObject {
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt,
     );
+  }
+}
+
+class WholesaleSalesReturnModel {
+  final String id;
+  final String? saleId;
+  final String invoiceNumber;
+  final String customerName;
+  final double refundAmount;
+  final String reason;
+  final List<Map<String, dynamic>>? items;
+
+  WholesaleSalesReturnModel({
+    required this.id,
+    this.saleId,
+    required this.invoiceNumber,
+    required this.customerName,
+    required this.refundAmount,
+    required this.reason,
+    this.items,
+  });
+
+  factory WholesaleSalesReturnModel.fromJson(Map<String, dynamic> json) {
+    return WholesaleSalesReturnModel(
+      id: json['id'] as String? ?? '',
+      saleId: json['sale_id'] as String?,
+      invoiceNumber: json['invoice_number']?.toString() ?? '',
+      customerName: json['customer_name'] as String? ?? '',
+      refundAmount: (json['refund_amount'] as num? ?? 0.0).toDouble(),
+      reason: json['reason'] as String? ?? '',
+      items: (json['items'] as List?)?.cast<Map<String, dynamic>>(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'sale_id': saleId,
+      'invoice_number': invoiceNumber,
+      'customer_name': customerName,
+      'refund_amount': refundAmount,
+      'reason': reason,
+      if (items != null) 'items': items,
+    };
   }
 }
 
@@ -349,7 +479,7 @@ class WholesaleOrderModel extends HiveObject {
   final String? notes;
 
   @HiveField(8)
-  final String status; // 'pending', 'confirmed', 'preparing', 'delivered', 'cancelled'
+  final String status;
 
   @HiveField(9)
   final bool isDeleted;

@@ -1,15 +1,32 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import '../core/api/api_client.dart';
 import '../models/price_compare_models.dart';
 
 class PriceCompareRepository {
   static const String _productsBoxName = 'price_compare_products';
   static const String _recordsBoxName = 'price_compare_records';
+  final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
     Hive.registerAdapter(PriceCompareProductModelAdapter());
     Hive.registerAdapter(PriceCompareRecordModelAdapter());
     await Hive.openBox<PriceCompareProductModel>(_productsBoxName);
     await Hive.openBox<PriceCompareRecordModel>(_recordsBoxName);
+  }
+
+  Future<List<Map<String, dynamic>>> getRemotePriceCompares() async {
+    final list = <Map<String, dynamic>>[];
+    try {
+      final remoteList = await _apiClient.getPriceCompares();
+      if (remoteList != null) {
+        for (final item in remoteList) {
+          if (item is Map<String, dynamic>) {
+            list.add(item);
+          }
+        }
+      }
+    } catch (_) {}
+    return list;
   }
 
   Future<List<PriceCompareProductModel>> getProducts() async {
@@ -37,7 +54,6 @@ class PriceCompareRepository {
     if (product != null) {
       await box.put(id, product.copyWith(isDeleted: true));
       
-      // Also soft delete associated records
       final recordsBox = Hive.box<PriceCompareRecordModel>(_recordsBoxName);
       final associated = recordsBox.values.where((r) => r.productId == id).toList();
       for (final r in associated) {

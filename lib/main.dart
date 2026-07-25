@@ -28,6 +28,7 @@ import 'repositories/employee_expense_repository.dart';
 import 'repositories/price_compare_repository.dart';
 import 'repositories/wholesale_repository.dart';
 
+import 'core/api/api_client.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/shell.dart';
 import 'screens/login/login_screen.dart';
@@ -37,6 +38,7 @@ void main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   await Hive.initFlutter();
+  await ApiClient().init();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,

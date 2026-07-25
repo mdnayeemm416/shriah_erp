@@ -4711,90 +4711,73 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
             },
           ),
         ),
-        body: RefreshIndicator(
-          color: AppColors.primary,
-          onRefresh: () async {
-            context.read<ShopBloc>().add(
-              LoadShopEntries(defaultShopId, workingDateTime),
-            );
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(15.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Header Row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                LucideIcons.store,
-                                size: 14,
-                                color: AppColors.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'SHOPS',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.primary,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              Text(
-                                ' · ${_shops.length}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ],
+        body: SafeArea(
+          child: RefreshIndicator(
+            color: const Color(0xFF24B489),
+            onRefresh: () async {
+              context.read<ShopBloc>().add(
+                LoadShopEntries(defaultShopId, workingDateTime),
+              );
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Top Header Row (Shops Count Pill on left, 3-Dots Menu on right)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                           ),
                         ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(LucideIcons.refreshCw, size: 18),
-                          onPressed: () {
-                            context.read<ShopBloc>().add(
-                              LoadShopEntries(defaultShopId, workingDateTime),
-                            );
-                          },
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.store, size: 16, color: Color(0xFF0D9488)),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Shops · ${_shops.length}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                            ),
+                          ],
                         ),
-                        PopupMenuButton<String>(
-                          icon: const Icon(LucideIcons.moreVertical, size: 20),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                      ),
+
+                      // 3-Dots Menu Button
+                      Container(
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                           ),
+                        ),
+                        child: PopupMenuButton<String>(
+                          icon: Icon(
+                            LucideIcons.moreVertical,
+                            size: 18,
+                            color: isDark ? Colors.white : const Color(0xFF475569),
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           color: isDark ? AppColors.cardDark : Colors.white,
                           elevation: 8,
                           onSelected: (String val) {
                             if (val == 'shops') _showManageShops();
-                            if (val == 'cashiers')
-                              _showManageCashiers(defaultShopId);
+                            if (val == 'cashiers') _showManageCashiers(defaultShopId);
                             if (val == 'categories') _showManageCategories();
-                            if (val == 'import')
-                              _showImportSales(defaultShopId);
-                            if (val == 'report')
-                              _showGenerateReport(shopCards, bounds);
+                            if (val == 'import') _showImportSales(defaultShopId);
+                            if (val == 'report') _showGenerateReport(shopCards, bounds);
                             if (val == 'excel') _exportExcel(shopCards, bounds);
                             if (val == 'pdf') _exportPdf(shopCards, bounds);
                             if (val == 'share') _shareReport(shopCards, bounds);
@@ -4804,19 +4787,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               value: 'import',
                               child: Row(
                                 children: [
-                                  Icon(
-                                    LucideIcons.fileSpreadsheet,
-                                    size: 16,
-                                    color: Colors.green.shade600,
-                                  ),
+                                  Icon(LucideIcons.fileSpreadsheet, size: 16, color: Colors.green.shade600),
                                   const SizedBox(width: 10),
-                                  const Text(
-                                    'Import Sales',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                  ),
+                                  const Text('Import Sales', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                                 ],
                               ),
                             ),
@@ -4824,19 +4797,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               value: 'report',
                               child: Row(
                                 children: [
-                                  Icon(
-                                    LucideIcons.barChart3,
-                                    size: 16,
-                                    color: Colors.blue.shade600,
-                                  ),
+                                  Icon(LucideIcons.barChart3, size: 16, color: Colors.blue.shade600),
                                   const SizedBox(width: 10),
-                                  const Text(
-                                    'Generate Report',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                  ),
+                                  const Text('Generate Report', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                                 ],
                               ),
                             ),
@@ -4844,19 +4807,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               value: 'excel',
                               child: Row(
                                 children: [
-                                  Icon(
-                                    LucideIcons.fileDown,
-                                    size: 16,
-                                    color: Colors.teal.shade600,
-                                  ),
+                                  Icon(LucideIcons.fileDown, size: 16, color: Colors.teal.shade600),
                                   const SizedBox(width: 10),
-                                  const Text(
-                                    'Export Excel',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                  ),
+                                  const Text('Export Excel', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                                 ],
                               ),
                             ),
@@ -4864,19 +4817,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               value: 'pdf',
                               child: Row(
                                 children: [
-                                  Icon(
-                                    LucideIcons.fileText,
-                                    size: 16,
-                                    color: Colors.red.shade600,
-                                  ),
+                                  Icon(LucideIcons.fileText, size: 16, color: Colors.red.shade600),
                                   const SizedBox(width: 10),
-                                  const Text(
-                                    'Export PDF',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                  ),
+                                  const Text('Export PDF', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                                 ],
                               ),
                             ),
@@ -4884,19 +4827,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               value: 'share',
                               child: Row(
                                 children: [
-                                  Icon(
-                                    LucideIcons.share2,
-                                    size: 16,
-                                    color: Colors.amber.shade700,
-                                  ),
+                                  Icon(LucideIcons.share2, size: 16, color: Colors.amber.shade700),
                                   const SizedBox(width: 10),
-                                  const Text(
-                                    'Share Report',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                  ),
+                                  const Text('Share Report', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                                 ],
                               ),
                             ),
@@ -4906,11 +4839,8 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               child: Row(
                                 children: [
                                   Icon(LucideIcons.store, size: 16),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    'Manage Shops',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
+                                  SizedBox(width: 10),
+                                  Text('Manage Shops', style: TextStyle(fontSize: 13)),
                                 ],
                               ),
                             ),
@@ -4919,11 +4849,8 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               child: Row(
                                 children: [
                                   Icon(LucideIcons.userCheck, size: 16),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    'Manage Cashiers',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
+                                  SizedBox(width: 10),
+                                  Text('Manage Cashiers', style: TextStyle(fontSize: 13)),
                                 ],
                               ),
                             ),
@@ -4932,924 +4859,838 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               child: Row(
                                 children: [
                                   Icon(LucideIcons.tag, size: 16),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    'Manage Categories',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
+                                  SizedBox(width: 10),
+                                  Text('Manage Categories', style: TextStyle(fontSize: 13)),
                                 ],
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ],
-                ),
-                // const SizedBox(height: 20),
-
-                // Date Filter Pills Row
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildDatePill('today', 'Today', isDark),
-                      _buildDatePill('yesterday', 'Yesterday', isDark),
-                      _buildDatePill('week', 'Weekly', isDark),
-                      _buildDatePill('month', 'Monthly', isDark),
-                      _buildDatePill('custom', 'Custom', isDark),
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                // Custom dates bounds selection
-                if (_dateRange == 'custom') ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.cardDark : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isDark
-                            ? AppColors.borderDark
-                            : AppColors.borderLight,
-                      ),
-                    ),
+                  // 2. Date Filter Pills Row (Horizontal Scroll)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: _customFrom ?? workingDateTime,
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2100),
-                              );
-                              if (date != null) {
-                                setState(() {
-                                  _customFrom = date;
-                                  _visibleCount = 20;
-                                });
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 10,
-                                horizontal: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.inputDark
-                                    : AppColors.inputLight,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isDark
-                                      ? AppColors.borderDark
-                                      : AppColors.borderLight,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    _customFrom != null
-                                        ? _formatDateString(_customFrom!)
-                                        : 'From Date',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const Icon(
-                                    LucideIcons.calendar,
-                                    size: 14,
-                                    color: Colors.grey,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: _customTo ?? workingDateTime,
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2100),
-                              );
-                              if (date != null) {
-                                setState(() {
-                                  _customTo = date;
-                                  _visibleCount = 20;
-                                });
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 10,
-                                horizontal: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.inputDark
-                                    : AppColors.inputLight,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isDark
-                                      ? AppColors.borderDark
-                                      : AppColors.borderLight,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    _customTo != null
-                                        ? _formatDateString(_customTo!)
-                                        : 'To Date',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const Icon(
-                                    LucideIcons.calendar,
-                                    size: 14,
-                                    color: Colors.grey,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                        _buildDatePill('today', 'Today', isDark),
+                        _buildDatePill('yesterday', 'Yesterday', isDark),
+                        _buildDatePill('week', 'Weekly', isDark),
+                        _buildDatePill('month', 'Monthly', isDark),
+                        _buildDatePill('custom', 'Custom', isDark),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                ],
+                  const SizedBox(height: 18),
 
-                // Shop Summary Cards Grid
-                const Text(
-                  'PER-SHOP FINANCIAL OVERVIEW',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.0,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isLarge = constraints.maxWidth > 900;
-                    return GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: shopCards.length,
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: isLarge ? 4 : 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 1.35,
+                  // Custom dates bounds selection
+                  if (_dateRange == 'custom') ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.cardDark : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                        ),
                       ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final date = await showDatePicker(
+                                  context: context,
+                                  initialDate: _customFrom ?? workingDateTime,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2100),
+                                );
+                                if (date != null) {
+                                  setState(() {
+                                    _customFrom = date;
+                                    _visibleCount = 20;
+                                  });
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: isDark ? AppColors.inputDark : AppColors.inputLight,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      _customFrom != null ? _formatDateString(_customFrom!) : 'From Date',
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                    const Icon(LucideIcons.calendar, size: 14, color: Colors.grey),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final date = await showDatePicker(
+                                  context: context,
+                                  initialDate: _customTo ?? workingDateTime,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2100),
+                                );
+                                if (date != null) {
+                                  setState(() {
+                                    _customTo = date;
+                                    _visibleCount = 20;
+                                  });
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: isDark ? AppColors.inputDark : AppColors.inputLight,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      _customTo != null ? _formatDateString(_customTo!) : 'To Date',
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                    const Icon(LucideIcons.calendar, size: 14, color: Colors.grey),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // 3. PER-SHOP SUMMARY HEADER
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'PER-SHOP SUMMARY',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          context.read<ShopBloc>().add(
+                            LoadShopEntries(defaultShopId, workingDateTime),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(LucideIcons.refreshCw, size: 12, color: isDark ? Colors.white70 : const Color(0xFF475569)),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Refresh',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white70 : const Color(0xFF475569),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 4. PER-SHOP SUMMARY CARDS CAROUSEL
+                  SizedBox(
+                    height: 245,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: shopCards.length,
+                      separatorBuilder: (context, index) => const SizedBox(width: 12),
                       itemBuilder: (context, idx) {
                         final summary = shopCards[idx];
-                        final isSelected = _shopFilter == summary.shop.id;
-                        final isSimple = summary.shop.shopType == 'simple_cash';
-
-                        return InkWell(
+                        final isSelected = _shopFilter == summary.shop.id || (_shopFilter == 'all' && idx == 0);
+                        return _buildShopSummaryCard(
+                          summary: summary,
+                          isSelected: isSelected,
+                          isDark: isDark,
                           onTap: () {
                             setState(() {
-                              _shopFilter = isSelected
-                                  ? 'all'
-                                  : summary.shop.id;
+                              _shopFilter = summary.shop.id;
                               _visibleCount = 20;
                             });
                           },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppColors.primary.withValues(alpha: 0.08)
-                                  : (isDark
-                                        ? AppColors.cardDark
-                                        : Colors.white),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : (isDark
-                                          ? AppColors.borderDark
-                                          : AppColors.borderLight),
-                                width: isSelected ? 2 : 1,
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: isSelected
-                                      ? AppColors.primary.withValues(
-                                          alpha: 0.15,
-                                        )
-                                      : Colors.black.withValues(alpha: 0.03),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 5. SELECTED SHOP BANNER (e.g. Main Store · This Month)
+                  if (_shopFilter != 'all') ...[
+                    Builder(
+                      builder: (context) {
+                        final currentShop = _shops.firstWhere(
+                          (s) => s.id == _shopFilter,
+                          orElse: () => ShopModel(id: '', name: 'Main Store', createdAt: DateTime.now()),
+                        );
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF132A29) : const Color(0xFFE8F5F1),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: const Color(0xFF24B489).withValues(alpha: 0.4),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            height: 8,
-                                            width: 8,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: isSimple
-                                                  ? Colors.indigo
-                                                  : AppColors.primary,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              summary.shop.name,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 13,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.store, size: 16, color: Color(0xFF0D9488)),
+                              const SizedBox(width: 8),
+                              Text(
+                                currentShop.name,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Text(
+                                  _dateRange == 'month' ? 'This Month' : _dateRange.toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              InkWell(
+                                onTap: () => setState(() => _shopFilter = 'all'),
+                                borderRadius: BorderRadius.circular(16),
+                                child: Icon(
+                                  LucideIcons.x,
+                                  size: 16,
+                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // 6. RECENT ENTRIES CONTAINER CARD
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.cardDark : Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header title
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(LucideIcons.wallet, size: 18, color: Color(0xFF0D9488)),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    '${_shopFilter == 'all' ? (_shops.isNotEmpty ? _shops.first.name : 'Main Store') : _shops.firstWhere((s) => s.id == _shopFilter, orElse: () => ShopModel(id: '', name: 'Main Store', createdAt: DateTime.now())).name} · Recent Entries',
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                '${filteredEntries.length}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0)),
+
+                        // Entry Category Filter Pills
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(
+                            children: [
+                              _buildFilterPill('all', 'All'),
+                              _buildFilterPill('pos_sale', 'POS Sale'),
+                              _buildFilterPill('cash_sale', 'Cash Sale'),
+                              _buildFilterPill('bank_sale', 'Bank Sale'),
+                              _buildFilterPill('credit_sale', 'Credit Sale'),
+                              Container(
+                                margin: const EdgeInsets.only(left: 4),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Icon(
+                                  LucideIcons.moreHorizontal,
+                                  size: 14,
+                                  color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Dynamic Net Total banner
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF132A29) : const Color(0xFFE8F5F1),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'NET TOTAL (ALL ENTRIES)',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                      color: Color(0xFF0D9488),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'This Month · ${filteredEntries.length} entries',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                'SAR ${netTotalSum.toStringAsFixed(netTotalSum.truncateToDouble() == netTotalSum ? 0 : 2)}',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0D9488),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Entries Rows list
+                        paginatedEntries.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 48),
+                                child: Center(
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        LucideIcons.inbox,
+                                        size: 36,
+                                        color: isDark ? Colors.white38 : Colors.grey[400],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'No matching records found in database.',
+                                        style: TextStyle(
+                                          color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: paginatedEntries.length,
+                                separatorBuilder: (context, index) => Divider(
+                                  height: 1,
+                                  color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                ),
+                                itemBuilder: (context, idx) {
+                                  final e = paginatedEntries[idx];
+                                  final eShop = _shops.firstWhere(
+                                    (s) => s.id == e.shopId,
+                                    orElse: () => ShopModel(
+                                      id: '',
+                                      name: 'Unknown',
+                                      createdAt: DateTime.now(),
+                                    ),
+                                  );
+
+                                  final isOut = e.entryType != 'sale';
+                                  double amtVal = 0.0;
+                                  IconData trIcon = LucideIcons.shoppingCart;
+                                  Color trColor = AppColors.primary;
+
+                                  if (e.entryType == 'sale') {
+                                    amtVal = e.cashSale + e.bankSale + e.creditSale - e.dueReceivable;
+                                    trIcon = LucideIcons.shoppingBag;
+                                    trColor = AppColors.primary;
+                                  } else if (e.entryType == 'purchase') {
+                                    amtVal = e.purchaseAmount;
+                                    trIcon = LucideIcons.package;
+                                    trColor = AppColors.warning;
+                                  } else if (e.entryType == 'expense') {
+                                    amtVal = e.expenseAmount;
+                                    trIcon = LucideIcons.fileSpreadsheet;
+                                    trColor = AppColors.destructive;
+                                  } else if (e.entryType == 'withdraw') {
+                                    amtVal = e.withdrawAmount;
+                                    trIcon = LucideIcons.banknote;
+                                    trColor = Colors.purple;
+                                  }
+
+                                  return ListTile(
+                                    onTap: () => _showEntryDetails(e),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 8,
+                                    ),
+                                    leading: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: trColor.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Icon(
+                                        trIcon,
+                                        size: 18,
+                                        color: trColor,
                                       ),
                                     ),
-                                    if (isSelected)
-                                      const Icon(
-                                        LucideIcons.checkCircle,
-                                        size: 14,
-                                        color: AppColors.primary,
-                                      ),
-                                  ],
-                                ),
-                                Column(
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
+                                    title: Row(
                                       children: [
-                                        const Expanded(
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
+                                        Expanded(
+                                          child: Text(
+                                            eShop.name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isDark ? AppColors.inputDark : AppColors.inputLight,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            e.entryType.toUpperCase(),
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.grey,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    subtitle: Padding(
+                                      padding: const EdgeInsets.only(top: 4.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            e.notes ?? 'No annotations entered.',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
                                             children: [
-                                              Icon(
-                                                LucideIcons.wallet,
-                                                size: 11,
+                                              const Icon(
+                                                LucideIcons.calendar,
+                                                size: 10,
                                                 color: Colors.grey,
                                               ),
-                                              SizedBox(width: 4),
-                                              Expanded(
-                                                child: Text(
-                                                  'Cash Drawer:',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                _formatDateString(e.txnDate),
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.grey,
                                                 ),
                                               ),
                                             ],
                                           ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          _formatCurrency(summary.cashPosition),
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    if (!isSimple) ...[
-                                      const SizedBox(height: 2),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          const Expanded(
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  LucideIcons.landmark,
-                                                  size: 11,
-                                                  color: Colors.grey,
-                                                ),
-                                                SizedBox(width: 4),
-                                                Expanded(
-                                                  child: Text(
-                                                    'Bank Balance:',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: Colors.grey,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            _formatCurrency(
-                                              summary.expectedBank,
-                                            ),
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
                                         ],
                                       ),
-                                    ],
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      LucideIcons.clock,
-                                      size: 9,
-                                      color: Colors.grey,
                                     ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        summary.lastDate != null
-                                            ? 'Last Entry: ${_formatDateString(summary.lastDate!)}'
-                                            : 'No transaction entries',
-                                        style: const TextStyle(
-                                          fontSize: 9,
-                                          color: Colors.grey,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-
-                // Active filter banner (Shop Specific)
-                if (_shopFilter != 'all') ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.08),
-                      border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.25),
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              LucideIcons.store,
-                              size: 16,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _shops
-                                  .firstWhere(
-                                    (s) => s.id == _shopFilter,
-                                    orElse: () => ShopModel(
-                                      id: '',
-                                      name: 'Selected Shop',
-                                      createdAt: DateTime.now(),
-                                    ),
-                                  )
-                                  .name
-                                  .toUpperCase(),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _shopFilter = 'all';
-                              _visibleCount = 20;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              LucideIcons.x,
-                              size: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // Recent entries card container
-                Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.cardDark : Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: isDark
-                          ? AppColors.borderDark
-                          : AppColors.borderLight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.02),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header title
-                      Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(
-                                  LucideIcons.scroll,
-                                  size: 18,
-                                  color: AppColors.primary,
-                                ),
-                                SizedBox(width: 10),
-                                Text(
-                                  'Ledger Transactions',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '${filteredEntries.length} records',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Divider(height: 1),
-
-                      // Entry Filter Pills
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        child: Row(
-                          children: [
-                            _buildFilterPill('all', 'All'),
-                            _buildFilterPill('pos_sale', 'POS Z-Report'),
-                            _buildFilterPill('cash_sale', 'Cash Drawer'),
-                            _buildFilterPill('bank_sale', 'Bank Transfer'),
-                            _buildFilterPill('credit_sale', 'Credit Baki'),
-                            _buildFilterPill('purchase', 'Purchases'),
-                            _buildFilterPill('expense', 'Expenses'),
-                            _buildFilterPill('withdraw', 'Withdrawals'),
-                            _buildFilterPill('difference', 'Plus / Minus'),
-                          ],
-                        ),
-                      ),
-
-                      // Dynamic Net Total banner
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: netTotalSum >= 0
-                                ? [
-                                    const Color(0xFF0F766E),
-                                    const Color(0xFF0D9488),
-                                  ]
-                                : [
-                                    const Color(0xFFBE123C),
-                                    const Color(0xFFE11D48),
-                                  ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _activeFilters.isEmpty
-                                        ? 'NET TRANSACTION TOTAL'
-                                        : '${_activeFilters.join(" + ").toUpperCase()} TOTAL',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.0,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        LucideIcons.calendar,
-                                        size: 10,
-                                        color: Colors.white54,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          'RANGE: ${_dateRange.toUpperCase()}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Colors.white54,
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              _formatCurrency(netTotalSum),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Entries Rows list
-                      paginatedEntries.isEmpty
-                          ? const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 48),
-                              child: Center(
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      LucideIcons.inbox,
-                                      size: 36,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(height: 12),
-                                    Text(
-                                      'No matching records found in database.',
-                                      style: TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: paginatedEntries.length,
-                              separatorBuilder: (context, index) =>
-                                  const Divider(height: 1),
-                              itemBuilder: (context, idx) {
-                                final e = paginatedEntries[idx];
-                                final eShop = _shops.firstWhere(
-                                  (s) => s.id == e.shopId,
-                                  orElse: () => ShopModel(
-                                    id: '',
-                                    name: 'Unknown',
-                                    createdAt: DateTime.now(),
-                                  ),
-                                );
-
-                                final isOut = e.entryType != 'sale';
-                                double amtVal = 0.0;
-                                IconData trIcon = LucideIcons.shoppingCart;
-                                Color trColor = AppColors.primary;
-
-                                if (e.entryType == 'sale') {
-                                  amtVal =
-                                      e.cashSale +
-                                      e.bankSale +
-                                      e.creditSale -
-                                      e.dueReceivable;
-                                  trIcon = LucideIcons.shoppingBag;
-                                  trColor = AppColors.primary;
-                                } else if (e.entryType == 'purchase') {
-                                  amtVal = e.purchaseAmount;
-                                  trIcon = LucideIcons.package;
-                                  trColor = AppColors.warning;
-                                } else if (e.entryType == 'expense') {
-                                  amtVal = e.expenseAmount;
-                                  trIcon = LucideIcons.fileSpreadsheet;
-                                  trColor = AppColors.destructive;
-                                } else if (e.entryType == 'withdraw') {
-                                  amtVal = e.withdrawAmount;
-                                  trIcon = LucideIcons.banknote;
-                                  trColor = Colors.purple;
-                                }
-
-                                return ListTile(
-                                  onTap: () => _showEntryDetails(e),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 8,
-                                  ),
-                                  leading: Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: trColor.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: Icon(
-                                      trIcon,
-                                      size: 18,
-                                      color: trColor,
-                                    ),
-                                  ),
-                                  title: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          eShop.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isDark
-                                              ? AppColors.inputDark
-                                              : AppColors.inputLight,
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
-                                          border: Border.all(
-                                            color: isDark
-                                                ? AppColors.borderDark
-                                                : AppColors.borderLight,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          e.entryType.toUpperCase(),
-                                          style: const TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.grey,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  subtitle: Padding(
-                                    padding: const EdgeInsets.only(top: 4.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
-                                          e.notes ?? 'No annotations entered.',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey,
+                                          '${isOut ? "-" : "+"}${_formatCurrency(amtVal)}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: isOut ? AppColors.destructive : AppColors.success,
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            const Icon(
-                                              LucideIcons.calendar,
-                                              size: 10,
-                                              color: Colors.grey,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              _formatDateString(e.txnDate),
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.grey,
-                                              ),
-                                            ),
-                                          ],
+                                        const SizedBox(width: 6),
+                                        const Icon(
+                                          LucideIcons.chevronRight,
+                                          size: 16,
+                                          color: Colors.grey,
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        '${isOut ? "-" : "+"}${_formatCurrency(amtVal)}',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: isOut
-                                              ? AppColors.destructive
-                                              : AppColors.success,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      const Icon(
-                                        LucideIcons.chevronRight,
-                                        size: 16,
-                                        color: Colors.grey,
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
+                                  );
+                                },
+                              ),
 
-                      // Load More Button
-                      if (filteredEntries.length > paginatedEntries.length) ...[
-                        const Divider(height: 1),
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Center(
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                        // Load More Button
+                        if (filteredEntries.length > paginatedEntries.length) ...[
+                          const Divider(height: 1),
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Center(
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  side: BorderSide(
+                                    color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
                                 ),
-                                side: BorderSide(
-                                  color: isDark
-                                      ? AppColors.borderDark
-                                      : AppColors.borderLight,
+                                child: Text(
+                                  'Load More (${filteredEntries.length - paginatedEntries.length} remaining)',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 12,
-                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _visibleCount += 20;
+                                  });
+                                },
                               ),
-                              child: Text(
-                                'Load More (${filteredEntries.length - paginatedEntries.length} remaining)',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _visibleCount += 20;
-                                });
-                              },
                             ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 60),
-              ],
+                  const SizedBox(height: 80),
+                ],
+              ),
             ),
           ),
         ),
       );
     }
 
-    return const Center(child: Text('Failed to load shop states.'));
+      return const Center(child: Text('Failed to load shop states.'));
+    }
+
+  Widget _buildShopSummaryCard({
+    required ShopCardSummary summary,
+    required bool isSelected,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    final cardBg = isSelected
+        ? (isDark ? const Color(0xFF132A29) : const Color(0xFFE8F5F1))
+        : (isDark ? AppColors.cardDark : Colors.white);
+    final borderColor = isSelected
+        ? const Color(0xFF24B489)
+        : (isDark ? AppColors.borderDark : const Color(0xFFE2E8F0));
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        width: 210,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: borderColor,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Top Row: Shop Icon, Name, and Status Dot
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFCCFBF1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(LucideIcons.store, color: Color(0xFF0D9488), size: 15),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    summary.shop.name,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isSelected)
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF10B981),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Inner Card 1: SHOP CASH POSITION
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFD1FAE5),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'SHOP CASH POSITION',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                          color: subtextColor,
+                        ),
+                      ),
+                      Icon(LucideIcons.info, size: 11, color: subtextColor),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'SAR ${summary.cashPosition.toStringAsFixed(summary.cashPosition.truncateToDouble() == summary.cashPosition ? 0 : 2)}',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: isSelected ? const Color(0xFF0D9488) : textColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            // Inner Card 2: EXPECTED BANK BALANCE
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFD1FAE5),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'EXPECTED BANK BALANCE',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                          color: subtextColor,
+                        ),
+                      ),
+                      Icon(LucideIcons.info, size: 11, color: subtextColor),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'SAR ${summary.expectedBank.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: isSelected ? const Color(0xFF0D9488) : textColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            // Footer Subtext
+            Text(
+              summary.lastDate != null ? 'Last: ${DateFormat('M/d/yyyy').format(summary.lastDate!)}' : 'No activity',
+              style: TextStyle(
+                fontSize: 10.5,
+                color: subtextColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildDatePill(String key, String label, bool isDark) {
     final active = _dateRange == key;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        labelStyle: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: active
-              ? (isDark ? AppColors.accentFgDark : AppColors.accentFgLight)
-              : (isDark ? Colors.white70 : Colors.black87),
-        ),
-        selected: active,
-        selectedColor: AppColors.primary.withValues(alpha: 0.15),
-        checkmarkColor: AppColors.primary,
-        backgroundColor: isDark ? AppColors.cardDark : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _dateRange = key;
+            _visibleCount = 20;
+          });
+        },
+        borderRadius: BorderRadius.circular(24),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+          decoration: BoxDecoration(
             color: active
-                ? AppColors.primary
-                : (isDark ? AppColors.borderDark : AppColors.borderLight),
+                ? const Color(0xFF24B489)
+                : (isDark ? const Color(0xFF1E293B) : Colors.white),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: active
+                  ? const Color(0xFF24B489)
+                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: active
+                  ? Colors.white
+                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+            ),
           ),
         ),
-        onSelected: (val) {
-          if (val) {
-            setState(() {
-              _dateRange = key;
-              _visibleCount = 20;
-            });
-          }
-        },
       ),
     );
   }
 
   Widget _buildFilterPill(String key, String label) {
-    final on = key == 'all'
-        ? _activeFilters.isEmpty
-        : _activeFilters.contains(key);
+    final on = key == 'all' ? _activeFilters.isEmpty : _activeFilters.contains(key);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         onTap: () {
           setState(() {
             if (key == 'all') {
@@ -5864,21 +5705,28 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
             _visibleCount = 20;
           });
         },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: on ? AppColors.primary : Colors.grey.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
+            color: on
+                ? const Color(0xFF24B489)
+                : (isDark ? const Color(0xFF1E293B) : Colors.white),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: on ? AppColors.primary : Colors.transparent,
+              color: on
+                  ? const Color(0xFF24B489)
+                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
             ),
           ),
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: on ? Colors.white : Colors.grey,
+              color: on
+                  ? Colors.white
+                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
             ),
           ),
         ),

@@ -9,6 +9,7 @@ import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../models/wholesale_models.dart';
 import '../wholesale_transaction_dialog.dart';
 import 'edit_transaction_dialog.dart';
+import 'sales_return_dialog.dart';
 
 class TransactionDetailDialog extends StatelessWidget {
   final dynamic entry;
@@ -513,6 +514,31 @@ class TransactionDetailDialog extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // Return Sale Button (Shown for WholesaleSaleModel)
+                  if (entry is WholesaleSaleModel) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: const BorderSide(color: Color(0xFFEF4444)),
+                          backgroundColor: cardBg,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          SalesReturnDialog.show(context, initialSale: entry as WholesaleSaleModel);
+                        },
+                        icon: const Icon(LucideIcons.undo2, size: 14, color: Color(0xFFEF4444)),
+                        label: const Text(
+                          'Return',
+                          style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

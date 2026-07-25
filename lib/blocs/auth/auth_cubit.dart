@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'auth_state.dart';
+import '../../models/user_model.dart';
 import '../../repositories/auth_repository.dart';
 
 class AuthCubit extends Cubit<AuthState> {
@@ -13,20 +14,18 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> checkAuth() async {
     emit(AuthLoading());
     try {
-      final box = await Hive.openBox('settings');
-      final savedUserId = box.get('userId');
-      
-      if (savedUserId != null) {
-        // If there was a saved user session, sign in mock user
-        final user = await authRepository.signIn(
-          identifier: box.get('userIdentifier', defaultValue: 'aahsanuh62@gmail.com'),
-          password: 'mock',
-        );
+      final box = await Hive.openBox('auth');
+      final token = box.get('auth_token') as String?;
+      final userProfileMap = box.get('user_profile');
+
+      if (token != null && token.isNotEmpty && userProfileMap is Map) {
+        final user = UserModel.fromJson(Map<String, dynamic>.from(userProfileMap));
+        authRepository.setCurrentUser(user);
         emit(AuthAuthenticated(user));
         return;
       }
       emit(AuthUnauthenticated());
-    } catch (e) {
+    } catch (_) {
       emit(AuthUnauthenticated());
     }
   }
@@ -38,14 +37,10 @@ class AuthCubit extends Cubit<AuthState> {
         identifier: identifier,
         password: password,
       );
-      
-      final box = await Hive.openBox('settings');
-      await box.put('userId', user.id);
-      await box.put('userIdentifier', identifier);
-      
       emit(AuthAuthenticated(user));
     } catch (e) {
-      emit(AuthError(e.toString()));
+      final errorMsg = e.toString().replaceFirst('Exception: ', '');
+      emit(AuthError(errorMsg));
     }
   }
 
@@ -53,11 +48,8 @@ class AuthCubit extends Cubit<AuthState> {
     emit(AuthLoading());
     try {
       await authRepository.signOut();
-      final box = await Hive.openBox('settings');
-      await box.delete('userId');
-      await box.delete('userIdentifier');
       emit(AuthUnauthenticated());
-    } catch (e) {
+    } catch (_) {
       emit(AuthUnauthenticated());
     }
   }

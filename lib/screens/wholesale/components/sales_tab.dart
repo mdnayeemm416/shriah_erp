@@ -4,12 +4,11 @@ import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../blocs/wholesale/wholesale_state.dart';
-import '../../../models/wholesale_models.dart';
 import '../wholesale_transaction_dialog.dart';
 import 'transaction_detail_dialog.dart';
+import 'sales_return_dialog.dart';
 
 class SalesTab extends StatefulWidget {
   const SalesTab({super.key});
@@ -179,64 +178,68 @@ class _SalesTabState extends State<SalesTab> {
             const SizedBox(height: 12),
 
             // 2. Sales Returns Card (Yellow Card Matching Image 2)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: yellowBg,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: yellowBorder),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFEF3C7),
-                          shape: BoxShape.circle,
+            InkWell(
+              onTap: () => SalesReturnDialog.show(context),
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: yellowBg,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: yellowBorder),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFEF3C7),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(LucideIcons.undo2, color: Color(0xFFD97706), size: 16),
                         ),
-                        child: const Icon(LucideIcons.undo2, color: Color(0xFFD97706), size: 16),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'SALES RETURNS',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.8,
-                                color: Color(0xFFD97706),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'SALES RETURNS',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.8,
+                                  color: Color(0xFFD97706),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Tap to view full history',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: isDark ? Colors.grey[400] : const Color(0xFF78350F),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Tap to process a new return',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: isDark ? Colors.grey[400] : const Color(0xFF78350F),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      Icon(LucideIcons.chevronRight, color: labelColor, size: 18),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildReturnStat('TODAY', 'SAR 0.00', isDark),
-                      _buildReturnStat('THIS MONTH', 'SAR 0.00', isDark),
-                      _buildReturnStat('TOTAL', 'SAR 0.00', isDark),
-                    ],
-                  ),
-                ],
+                        Icon(LucideIcons.chevronRight, color: labelColor, size: 18),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildReturnStat('TODAY', 'SAR 0.00', isDark),
+                        _buildReturnStat('THIS MONTH', 'SAR 0.00', isDark),
+                        _buildReturnStat('TOTAL', 'SAR 0.00', isDark),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 14),
@@ -321,9 +324,7 @@ class _SalesTabState extends State<SalesTab> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     ),
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('New Sales Return feature...')),
-                      );
+                      SalesReturnDialog.show(context);
                     },
                     icon: const Icon(LucideIcons.undo2, size: 16, color: Colors.white),
                     label: const Text(

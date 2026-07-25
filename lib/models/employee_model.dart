@@ -32,15 +32,18 @@ class EmployeeModel extends HiveObject {
   });
 
   factory EmployeeModel.fromJson(Map<String, dynamic> json) {
+    final salary = (json['monthly_salary'] ?? json['salary']) as num? ?? 0.0;
     return EmployeeModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? 'Employee',
       shopId: json['shop_id'] as String?,
-      monthlySalary: (json['monthly_salary'] as num? ?? 0.0).toDouble(),
+      monthlySalary: salary.toDouble(),
       isDeleted: json['is_deleted'] as bool? ?? false,
       createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'] as String) 
-          : DateTime.now(),
+          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
+          : (json['joining_date'] != null
+              ? DateTime.tryParse(json['joining_date'] as String) ?? DateTime.now()
+              : DateTime.now()),
     );
   }
 
@@ -50,6 +53,7 @@ class EmployeeModel extends HiveObject {
       'name': name,
       'shop_id': shopId,
       'monthly_salary': monthlySalary,
+      'salary': monthlySalary,
       'is_deleted': isDeleted,
       'created_at': createdAt.toIso8601String(),
     };
