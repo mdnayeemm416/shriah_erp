@@ -19,12 +19,16 @@ class ShopModel extends HiveObject {
   @HiveField(4)
   final DateTime createdAt;
 
+  @HiveField(5)
+  final double? openingCash;
+
   ShopModel({
     required this.id,
     required this.name,
     this.shopType = 'full_erp',
     this.isDeleted = false,
     required this.createdAt,
+    this.openingCash,
   });
 
   factory ShopModel.fromJson(Map<String, dynamic> json) {
@@ -36,6 +40,7 @@ class ShopModel extends HiveObject {
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at'] as String) 
           : DateTime.now(),
+      openingCash: (json['opening_cash'] as num?)?.toDouble(),
     );
   }
 
@@ -46,6 +51,7 @@ class ShopModel extends HiveObject {
       'shop_type': shopType,
       'is_deleted': isDeleted,
       'created_at': createdAt.toIso8601String(),
+      'opening_cash': openingCash,
     };
   }
 
@@ -53,6 +59,7 @@ class ShopModel extends HiveObject {
     String? name,
     String? shopType,
     bool? isDeleted,
+    double? openingCash,
   }) {
     return ShopModel(
       id: id,
@@ -60,6 +67,7 @@ class ShopModel extends HiveObject {
       shopType: shopType ?? this.shopType,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt,
+      openingCash: openingCash ?? this.openingCash,
     );
   }
 }

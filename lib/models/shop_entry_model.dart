@@ -79,6 +79,12 @@ class ShopEntryModel extends HiveObject {
     required this.createdAt,
   });
 
+  double calculateTotalSale() {
+    return cashSale + bankSale + creditSale - dueReceivable;
+  }
+
+  double get totalSale => calculateTotalSale();
+
   factory ShopEntryModel.fromJson(Map<String, dynamic> json) {
     return ShopEntryModel(
       id: json['id'] as String,

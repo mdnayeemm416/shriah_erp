@@ -17,6 +17,13 @@ import '../../models/cashier_model.dart';
 import '../../models/shop_entry_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../repositories/shop_repository.dart';
+import 'components/shop_models.dart';
+import 'components/shop_header.dart';
+import 'components/shop_date_filter_bar.dart';
+import 'components/per_shop_summary_section.dart';
+import 'components/active_shop_banner.dart';
+import 'components/recent_entries_section.dart';
+import 'components/new_entry_bottom_sheet.dart';
 
 class ShopScreen extends StatefulWidget {
   const ShopScreen({super.key});
@@ -1023,1042 +1030,51 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
   }
 
   void _showEntryFormSheet(String defaultShopId, {ShopEntryModel? entry}) {
-    _clearForm();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (entry != null) {
-      _editingEntry = entry;
-      _formShopId = entry.shopId;
-      _formDate = entry.txnDate;
-      _selectedCashierId = entry.cashierId;
-
-      _posSaleController.text = entry.posSale > 0
-          ? entry.posSale.toString()
-          : '';
-      _cashSaleController.text = entry.cashSale > 0
-          ? entry.cashSale.toString()
-          : '';
-      _bankSaleController.text = entry.bankSale > 0
-          ? entry.bankSale.toString()
-          : '';
-      _creditSaleController.text = entry.creditSale > 0
-          ? entry.creditSale.toString()
-          : '';
-      _dueReceivableController.text = entry.dueReceivable > 0
-          ? entry.dueReceivable.toString()
-          : '';
-      _purchaseController.text = entry.purchaseAmount > 0
-          ? entry.purchaseAmount.toString()
-          : '';
-      _expenseController.text = entry.expenseAmount > 0
-          ? entry.expenseAmount.toString()
-          : '';
-      _withdrawController.text = entry.withdrawAmount > 0
-          ? entry.withdrawAmount.toString()
-          : '';
-      _notesController.text = entry.notes ?? '';
-      _attachmentController.text = entry.attachmentUrl ?? '';
-
-      final activeShop = _shops.firstWhere(
-        (s) => s.id == entry.shopId,
-        orElse: () => ShopModel(id: '', name: '', createdAt: DateTime.now()),
-      );
-      final simple = activeShop.shopType == 'simple_cash';
-
-      int tabIdx = 0;
-      if (simple) {
-        tabIdx = entry.entryType == 'sale' ? 0 : 1;
-      } else {
-        if (entry.entryType == 'sale') tabIdx = 0;
-        if (entry.entryType == 'purchase') tabIdx = 1;
-        if (entry.entryType == 'expense') tabIdx = 2;
-        if (entry.entryType == 'withdraw') tabIdx = 3;
-      }
-      _formTabController.index = tabIdx;
-    } else {
-      _formShopId = defaultShopId;
-      _formDate = DateTime.now();
-      _formTabController.index = 0;
-    }
-
-    showModalBottomSheet(
+    NewEntryBottomSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: isDark ? AppColors.bgDark : AppColors.bgLight,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(32),
-          topRight: Radius.circular(32),
-        ),
-      ),
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setSheetState) {
-            final activeShopId = _formShopId ?? defaultShopId;
-            final shop = _shops.firstWhere(
-              (s) => s.id == activeShopId,
-              orElse: () =>
-                  ShopModel(id: '', name: 'Unknown', createdAt: DateTime.now()),
-            );
-            final simpleMode = shop.shopType == 'simple_cash';
-            final filteredCashiers = _cashiers
-                .where((c) => c.shopId == activeShopId)
-                .toList();
+      defaultShopId: defaultShopId,
+      editingEntry: entry,
+      shops: _shops,
+      cashiers: _cashiers,
+      isDark: isDark,
+      onSubmit: (data) {
+        _editingEntry = entry;
+        _formShopId = data['shop_id'];
+        _formDate = data['txn_date'];
+        _selectedCashierId = data['cashier_id'];
 
-            // Perform calculations
-            final posVal = double.tryParse(_posSaleController.text) ?? 0.0;
-            final cashVal = double.tryParse(_cashSaleController.text) ?? 0.0;
-            final bankVal = double.tryParse(_bankSaleController.text) ?? 0.0;
-            final creditVal =
-                double.tryParse(_creditSaleController.text) ?? 0.0;
-            final dueVal =
-                double.tryParse(_dueReceivableController.text) ?? 0.0;
+        _posSaleController.text = data['pos_sale'].toString();
+        _cashSaleController.text = data['cash_sale'].toString();
+        _bankSaleController.text = data['bank_sale'].toString();
+        _creditSaleController.text = data['credit_sale'].toString();
+        _dueReceivableController.text = data['due_receivable'].toString();
+        _purchaseController.text = data['purchase_amount'].toString();
+        _expenseController.text = data['expense_amount'].toString();
+        _withdrawController.text = data['withdraw_amount'].toString();
+        _notesController.text = data['notes'] ?? '';
+        _attachmentController.text = data['attachment_url'] ?? '';
 
-            final totalSale = cashVal + bankVal + creditVal - dueVal;
-            final diff = totalSale - posVal;
-
-            // Form Validation helper
-            String? numberValidator(String? val, bool isReq) {
-              if (isReq) {
-                if (val == null ||
-                    double.tryParse(val) == null ||
-                    double.parse(val) <= 0) {
-                  return 'Enter valid positive number';
-                }
-              }
-              return null;
-            }
-
-            return Container(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              height: MediaQuery.of(context).size.height * 0.88,
-              child: Column(
-                children: [
-                  // Pull indicator and Title
-                  Padding(
-                    padding: const EdgeInsets.only(top: 14, bottom: 8),
-                    child: Container(
-                      height: 5,
-                      width: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _editingEntry != null
-                                  ? 'Edit Transaction'
-                                  : 'Record New Entry',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              shop.name.toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            icon: const Icon(LucideIcons.x, size: 18),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-
-                  // Scrollable form contents
-                  Expanded(
-                    child: Form(
-                      key: _formKey,
-                      child: ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        children: [
-                          // Date and Shop Selection Card
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppColors.cardDark : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: isDark
-                                    ? AppColors.borderDark
-                                    : AppColors.borderLight,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'DATE SELECTION',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10,
-                                          color: Colors.grey,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      InkWell(
-                                        onTap: () async {
-                                          final picked = await showDatePicker(
-                                            context: context,
-                                            initialDate: _formDate,
-                                            firstDate: DateTime(2020),
-                                            lastDate: DateTime(2100),
-                                          );
-                                          if (picked != null) {
-                                            setSheetState(() {
-                                              _formDate = picked;
-                                            });
-                                          }
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 12,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isDark
-                                                ? AppColors.inputDark
-                                                : AppColors.inputLight,
-                                            border: Border.all(
-                                              color: isDark
-                                                  ? AppColors.borderDark
-                                                  : AppColors.borderLight,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                _formatDateString(_formDate),
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 13,
-                                                ),
-                                              ),
-                                              const Icon(
-                                                LucideIcons.calendar,
-                                                size: 16,
-                                                color: Colors.grey,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'OUTLET SHOP',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10,
-                                          color: Colors.grey,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      DropdownButtonFormField<String>(
-                                        value: activeShopId,
-                                        isExpanded: true,
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? Colors.white
-                                              : Colors.black,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                        decoration: InputDecoration(
-                                          fillColor: isDark
-                                              ? AppColors.inputDark
-                                              : AppColors.inputLight,
-                                          filled: true,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 12,
-                                              ),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: isDark
-                                                  ? AppColors.borderDark
-                                                  : AppColors.borderLight,
-                                            ),
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: isDark
-                                                  ? AppColors.borderDark
-                                                  : AppColors.borderLight,
-                                            ),
-                                          ),
-                                        ),
-                                        items: _shops.map((s) {
-                                          return DropdownMenuItem(
-                                            value: s.id,
-                                            child: Text(
-                                              s.name,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          );
-                                        }).toList(),
-                                        onChanged: (val) {
-                                          if (val != null) {
-                                            setSheetState(() {
-                                              _formShopId = val;
-                                              _selectedCashierId = null;
-
-                                              final nextShop = _shops
-                                                  .firstWhere(
-                                                    (s) => s.id == val,
-                                                  );
-                                              final isNextSimple =
-                                                  nextShop.shopType ==
-                                                  'simple_cash';
-                                              if (isNextSimple &&
-                                                  _formTabController.index >
-                                                      1) {
-                                                _formTabController.index = 0;
-                                              }
-                                            });
-                                            setState(() {
-                                              _formShopId = val;
-                                            });
-                                          }
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Tab bar styled container
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppColors.cardDark : Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isDark
-                                    ? AppColors.borderDark
-                                    : AppColors.borderLight,
-                              ),
-                            ),
-                            child: TabBar(
-                              controller: _formTabController,
-                              indicator: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              indicatorSize: TabBarIndicatorSize.tab,
-                              dividerColor: Colors.transparent,
-                              labelColor: Colors.white,
-                              unselectedLabelColor: Colors.grey,
-                              labelStyle: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                              unselectedLabelStyle: const TextStyle(
-                                fontWeight: FontWeight.normal,
-                                fontSize: 12,
-                              ),
-                              tabs: simpleMode
-                                  ? const [
-                                      Tab(text: 'Cash In'),
-                                      Tab(text: 'Expense'),
-                                    ]
-                                  : const [
-                                      Tab(text: 'Sales'),
-                                      Tab(text: 'Purchase'),
-                                      Tab(text: 'Expense'),
-                                      Tab(text: 'Withdraw'),
-                                    ],
-                              onTap: (idx) {
-                                setSheetState(() {});
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Dynamic Form fields depending on active tab
-                          if (_formTabController.index == 0) ...[
-                            if (simpleMode) ...[
-                              _buildFormField(
-                                controller: _cashSaleController,
-                                label: 'CASH IN AMOUNT',
-                                isDark: isDark,
-                                validator: (val) => numberValidator(val, true),
-                              ),
-                            ] else ...[
-                              // Full ERP Sales fields
-                              const Text(
-                                'CASHIER ACCOUNT',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              DropdownButtonFormField<String>(
-                                value: _selectedCashierId,
-                                isExpanded: true,
-                                style: TextStyle(
-                                  color: isDark ? Colors.white : Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                                hint: const Text(
-                                  'Assign Cashier Account...',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.normal,
-                                  ),
-                                ),
-                                decoration: InputDecoration(
-                                  fillColor: isDark
-                                      ? AppColors.inputDark
-                                      : AppColors.inputLight,
-                                  filled: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 12,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: isDark
-                                          ? AppColors.borderDark
-                                          : AppColors.borderLight,
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: isDark
-                                          ? AppColors.borderDark
-                                          : AppColors.borderLight,
-                                    ),
-                                  ),
-                                ),
-                                items: filteredCashiers.map((c) {
-                                  return DropdownMenuItem(
-                                    value: c.id,
-                                    child: Text(c.name),
-                                  );
-                                }).toList(),
-                                onChanged: (val) {
-                                  setSheetState(() {
-                                    _selectedCashierId = val;
-                                  });
-                                },
-                              ),
-                              const SizedBox(height: 20),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildFormField(
-                                      controller: _posSaleController,
-                                      label: 'POS CARD TOTAL',
-                                      isDark: isDark,
-                                      hint: 'Z-Report cash sum',
-                                      validator: (val) =>
-                                          numberValidator(val, false),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _buildFormField(
-                                      controller: _cashSaleController,
-                                      label: 'CASH DRAWER TOTAL',
-                                      isDark: isDark,
-                                      hint: 'Physical cash drawer',
-                                      validator: (val) =>
-                                          numberValidator(val, false),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildFormField(
-                                      controller: _bankSaleController,
-                                      label: 'BANK SALES TRANSFER',
-                                      isDark: isDark,
-                                      hint: 'Direct bank payments',
-                                      validator: (val) =>
-                                          numberValidator(val, false),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _buildFormField(
-                                      controller: _creditSaleController,
-                                      label: 'CREDIT SALE / BAKI',
-                                      isDark: isDark,
-                                      hint: 'Customer credit sum',
-                                      validator: (val) =>
-                                          numberValidator(val, false),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              _buildFormField(
-                                controller: _dueReceivableController,
-                                label: 'DUE CASH RECEIVED',
-                                isDark: isDark,
-                                hint: 'Collection of old dues',
-                                validator: (val) => numberValidator(val, false),
-                              ),
-
-                              // Interactive Total Card
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFF0F766E),
-                                      Color(0xFF0D9488),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFF0D9488,
-                                      ).withValues(alpha: 0.25),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Row(
-                                      children: [
-                                        Icon(
-                                          LucideIcons.info,
-                                          size: 18,
-                                          color: Colors.white,
-                                        ),
-                                        SizedBox(width: 10),
-                                        Text(
-                                          'Calculated Net Sale:',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Text(
-                                      _formatCurrency(totalSale),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-
-                              // Diff discrepancy card
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: diff == 0
-                                      ? Colors.grey.withValues(alpha: 0.1)
-                                      : diff > 0
-                                      ? AppColors.success.withValues(alpha: 0.1)
-                                      : AppColors.destructive.withValues(
-                                          alpha: 0.1,
-                                        ),
-                                  border: Border.all(
-                                    color: diff == 0
-                                        ? Colors.grey.withValues(alpha: 0.3)
-                                        : diff > 0
-                                        ? AppColors.success.withValues(
-                                            alpha: 0.3,
-                                          )
-                                        : AppColors.destructive.withValues(
-                                            alpha: 0.3,
-                                          ),
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          diff == 0
-                                              ? LucideIcons.checkCircle
-                                              : diff > 0
-                                              ? LucideIcons.plusCircle
-                                              : LucideIcons.minusCircle,
-                                          size: 16,
-                                          color: diff == 0
-                                              ? Colors.grey
-                                              : diff > 0
-                                              ? AppColors.success
-                                              : AppColors.destructive,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          diff == 0
-                                              ? 'POS Match Status: Perfect'
-                                              : diff > 0
-                                              ? 'Discrepancy: Cash Surplus'
-                                              : 'Discrepancy: Cash Shortage',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                            color: diff == 0
-                                                ? Colors.grey
-                                                : diff > 0
-                                                ? AppColors.success
-                                                : AppColors.destructive,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Text(
-                                      '${diff >= 0 ? "+" : ""}${diff.toStringAsFixed(2)} SAR',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        color: diff == 0
-                                            ? Colors.grey
-                                            : diff > 0
-                                            ? AppColors.success
-                                            : AppColors.destructive,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ] else if (_formTabController.index == 1 &&
-                              !simpleMode) ...[
-                            // Tab 1: Purchase (Full ERP)
-                            _buildFormField(
-                              controller: _purchaseController,
-                              label: 'PURCHASE INVOICE AMOUNT',
-                              isDark: isDark,
-                              hint: 'SAR amount paid',
-                              validator: (val) => numberValidator(val, true),
-                            ),
-                            const SizedBox(height: 8),
-
-                            // Mock OCR scanner visual block
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.cardDark
-                                    : Colors.white,
-                                border: Border.all(
-                                  color: isDark
-                                      ? AppColors.borderDark
-                                      : AppColors.borderLight,
-                                ),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        LucideIcons.sparkles,
-                                        size: 16,
-                                        color: AppColors.primary,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Text(
-                                        'Simulated AI Receipt OCR Scanner',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      if (_isOcrScanning) ...[
-                                        const SizedBox(width: 8),
-                                        const SizedBox(
-                                          height: 12,
-                                          width: 12,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: AppColors.primary,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  const Text(
-                                    'Mock scan will auto-fill receipt totals and invoice tags using simulated Gemini analysis.',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.primary,
-                                            foregroundColor: Colors.white,
-                                            elevation: 0,
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 12,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                          ),
-                                          icon: const Icon(
-                                            LucideIcons.camera,
-                                            size: 14,
-                                          ),
-                                          label: const Text(
-                                            'Camera',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          onPressed: _isOcrScanning
-                                              ? null
-                                              : () => _triggerSimulatedOCR(
-                                                  setSheetState,
-                                                ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.primary
-                                                .withValues(alpha: 0.1),
-                                            foregroundColor: AppColors.primary,
-                                            elevation: 0,
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 12,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                          ),
-                                          icon: const Icon(
-                                            LucideIcons.image,
-                                            size: 14,
-                                          ),
-                                          label: const Text(
-                                            'Gallery',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          onPressed: _isOcrScanning
-                                              ? null
-                                              : () => _triggerSimulatedOCR(
-                                                  setSheetState,
-                                                ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.primary
-                                                .withValues(alpha: 0.1),
-                                            foregroundColor: AppColors.primary,
-                                            elevation: 0,
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 12,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                          ),
-                                          icon: const Icon(
-                                            LucideIcons.fileText,
-                                            size: 14,
-                                          ),
-                                          label: const Text(
-                                            'PDF Slip',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          onPressed: _isOcrScanning
-                                              ? null
-                                              : () => _triggerSimulatedOCR(
-                                                  setSheetState,
-                                                ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  if (_ocrDetectedTotal != null) ...[
-                                    const SizedBox(height: 14),
-                                    Container(
-                                      padding: const EdgeInsets.all(14),
-                                      decoration: BoxDecoration(
-                                        color: Colors.teal.withValues(
-                                          alpha: 0.08,
-                                        ),
-                                        borderRadius: BorderRadius.circular(14),
-                                        border: Border.all(
-                                          color: Colors.teal.withValues(
-                                            alpha: 0.25,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Row(
-                                            children: [
-                                              Icon(
-                                                LucideIcons.checkSquare,
-                                                size: 14,
-                                                color: Colors.teal,
-                                              ),
-                                              SizedBox(width: 6),
-                                              Text(
-                                                'OCR Detection Verified:',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 11,
-                                                  color: Colors.teal,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            'Detected Total: ${_formatCurrency(_ocrDetectedTotal!)}',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Current Input Value: ${_formatCurrency(double.tryParse(_purchaseController.text) ?? 0.0)}',
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 10),
-                                          InkWell(
-                                            onTap: () {
-                                              setSheetState(() {
-                                                _ocrMismatchAck =
-                                                    !_ocrMismatchAck;
-                                              });
-                                            },
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  _ocrMismatchAck
-                                                      ? LucideIcons.checkCircle
-                                                      : LucideIcons.circle,
-                                                  size: 16,
-                                                  color: _ocrMismatchAck
-                                                      ? Colors.teal
-                                                      : Colors.grey,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                const Expanded(
-                                                  child: Text(
-                                                    'Verify visual match and check manual confirmation.',
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      color: Colors.grey,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ] else if ((_formTabController.index == 2 &&
-                                  !simpleMode) ||
-                              (_formTabController.index == 1 &&
-                                  simpleMode)) ...[
-                            // Tab 2: Expense (Full) or Tab 1: Expense (Simple)
-                            _buildFormField(
-                              controller: _expenseController,
-                              label: 'EXPENSE VALUE',
-                              isDark: isDark,
-                              hint: 'SAR amount spent',
-                              validator: (val) => numberValidator(val, true),
-                            ),
-                          ] else if (_formTabController.index == 3 &&
-                              !simpleMode) ...[
-                            // Tab 3: Withdraw (Full ERP)
-                            _buildFormField(
-                              controller: _withdrawController,
-                              label: 'CASH WITHDRAWAL TRANSFER',
-                              isDark: isDark,
-                              hint: 'Transfer amount sent',
-                              validator: (val) => numberValidator(val, true),
-                            ),
-                          ],
-
-                          const SizedBox(height: 20),
-                          // Notes description (required for non-sales)
-                          _buildFormField(
-                            controller: _notesController,
-                            label: 'REMARKS / DESCRIPTION',
-                            isDark: isDark,
-                            hint: 'Entry references & annotations...',
-                            maxLines: 2,
-                            validator: (val) {
-                              final activeIndex = _formTabController.index;
-                              final isSale = simpleMode
-                                  ? (activeIndex == 0)
-                                  : (activeIndex == 0);
-                              if (!isSale &&
-                                  (val == null || val.trim().isEmpty)) {
-                                return 'Description note is required for tracking.';
-                              }
-                              return null;
-                            },
-                          ),
-
-                          const SizedBox(height: 12),
-                          // Attachment (Optional)
-                          _buildFormField(
-                            controller: _attachmentController,
-                            label: 'ATTACHMENT LINK (OPTIONAL)',
-                            isDark: isDark,
-                            hint: 'e.g. invoice_slip_scan.jpg',
-                          ),
-
-                          const SizedBox(height: 32),
-                          // Action submit button
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(52),
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              elevation: 2,
-                              shadowColor: AppColors.primary.withValues(
-                                alpha: 0.3,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            onPressed: () {
-                              _submitForm(defaultShopId);
-                            },
-                            child: Text(
-                              _editingEntry != null
-                                  ? 'CONFIRM UPDATE'
-                                  : 'RECORD TRANSACTION',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.0,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
+        final activeShop = _shops.firstWhere(
+          (s) => s.id == _formShopId,
+          orElse: () => ShopModel(id: '', name: '', createdAt: DateTime.now()),
         );
+        final simple = activeShop.shopType == 'simple_cash';
+
+        int tabIdx = 0;
+        final entryType = data['entry_type'] as String;
+        if (simple) {
+          tabIdx = entryType == 'sale' ? 0 : 1;
+        } else {
+          if (entryType == 'sale') tabIdx = 0;
+          if (entryType == 'purchase') tabIdx = 1;
+          if (entryType == 'expense') tabIdx = 2;
+          if (entryType == 'withdraw') tabIdx = 3;
+        }
+        _formTabController.index = tabIdx;
+
+        _submitForm(defaultShopId);
       },
     );
   }
@@ -2137,6 +1153,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
 
   void _showManageShops() {
     final nameController = TextEditingController();
+    final cashController = TextEditingController(text: '0');
     String shopType = 'full_erp';
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -2146,295 +1163,394 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(28),
               ),
-              backgroundColor: isDark ? AppColors.cardDark : Colors.white,
-              clipBehavior: Clip.antiAlias,
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.9,
-                height: 480,
-                child: Column(
-                  children: [
-                    // Header title banner
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 18,
-                      ),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [AppColors.primary, AppColors.primaryGlow],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Row(
+              backgroundColor: isDark ? AppColors.cardDark : const Color(0xFFFAFAFA),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // 1. Header with title & close button
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
+                          Text(
                             'Manage Shops',
                             style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              fontSize: 16,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              LucideIcons.x,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // List of existing shops
-                    Expanded(
-                      child: _shops.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No shops found.',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _shops.length,
-                              itemBuilder: (context, idx) {
-                                final s = _shops[idx];
-                                final isSimple = s.shopType == 'simple_cash';
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? AppColors.inputDark
-                                        : AppColors.inputLight,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: isDark
-                                          ? AppColors.borderDark
-                                          : AppColors.borderLight,
-                                    ),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        border: Border(
-                                          left: BorderSide(
-                                            color: isSimple
-                                                ? Colors.indigo
-                                                : AppColors.primary,
-                                            width: 4,
-                                          ),
-                                        ),
-                                      ),
-                                      child: ListTile(
-                                        dense: true,
-                                        leading: Icon(
-                                          isSimple
-                                              ? LucideIcons.wallet
-                                              : LucideIcons.store,
-                                          color: isSimple
-                                              ? Colors.indigo
-                                              : AppColors.primary,
-                                        ),
-                                        title: Text(
-                                          s.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        subtitle: Text(
-                                          isSimple
-                                              ? 'Simple Cash Outlets'
-                                              : 'Full ERP Workflows',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                        trailing: IconButton(
-                                          icon: const Icon(
-                                            LucideIcons.trash2,
-                                            size: 16,
-                                            color: AppColors.destructive,
-                                          ),
-                                          onPressed: () async {
-                                            final repo = ShopRepository();
-                                            await repo.saveShop(
-                                              s.copyWith(isDeleted: true),
-                                            );
-                                            if (!mounted) return;
-                                            context.read<ShopBloc>().add(
-                                              LoadShops(),
-                                            );
-                                            Navigator.pop(context);
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Shop deleted.'),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    const Divider(height: 1),
-
-                    // Add New Shop block
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'ADD NEW SHOP OUTLET',
-                            style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                              color: Colors.grey,
-                              letterSpacing: 0.5,
+                              fontSize: 18,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: nameController,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: 'Shop display name...',
-                                    hintStyle: const TextStyle(
-                                      fontWeight: FontWeight.normal,
-                                      fontSize: 12,
-                                    ),
-                                    fillColor: isDark
-                                        ? AppColors.inputDark
-                                        : AppColors.inputLight,
-                                    filled: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? AppColors.borderDark
-                                            : AppColors.borderLight,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? AppColors.borderDark
-                                            : AppColors.borderLight,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                          InkWell(
+                            onTap: () => Navigator.pop(context),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFF2DD4BF), width: 1.5),
                               ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                onPressed: () async {
-                                  final name = nameController.text.trim();
-                                  if (name.isEmpty) return;
-                                  final repo = ShopRepository();
-                                  final newShop = ShopModel(
-                                    id: 'shop-${DateTime.now().millisecondsSinceEpoch}',
-                                    name: name,
-                                    shopType: shopType,
-                                    createdAt: DateTime.now(),
-                                  );
-                                  await repo.saveShop(newShop);
-                                  if (!mounted) return;
-                                  context.read<ShopBloc>().add(LoadShops());
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Shop outlet created successfully.',
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: const Text(
-                                  'Add',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
+                              child: const Icon(
+                                LucideIcons.x,
+                                size: 16,
+                                color: Color(0xFF0D9488),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              ChoiceChip(
-                                label: const Text(
-                                  'Full ERP Workflow',
-                                  style: TextStyle(fontSize: 11),
-                                ),
-                                selected: shopType == 'full_erp',
-                                selectedColor: AppColors.primary.withValues(
-                                  alpha: 0.15,
-                                ),
-                                checkmarkColor: AppColors.primary,
-                                onSelected: (val) {
-                                  if (val)
-                                    setDialogState(() => shopType = 'full_erp');
-                                },
-                              ),
-                              ChoiceChip(
-                                label: const Text(
-                                  'Simple Cash Drawer',
-                                  style: TextStyle(fontSize: 11),
-                                ),
-                                selected: shopType == 'simple_cash',
-                                selectedColor: Colors.indigo.withValues(
-                                  alpha: 0.15,
-                                ),
-                                checkmarkColor: Colors.indigo,
-                                onSelected: (val) {
-                                  if (val)
-                                    setDialogState(
-                                      () => shopType = 'simple_cash',
-                                    );
-                                },
-                              ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 20),
+
+                      // 2. Form Inputs
+                      // Shop Name
+                      Text(
+                        'Shop name',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: nameController,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Main branch',
+                          hintStyle: TextStyle(
+                            color: isDark ? Colors.grey.shade500 : const Color(0xFF94A3B8),
+                            fontSize: 13,
+                          ),
+                          fillColor: isDark ? AppColors.inputDark : Colors.white,
+                          filled: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Opening Cash
+                      Text(
+                        'Opening cash',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: cashController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                        decoration: InputDecoration(
+                          fillColor: isDark ? AppColors.inputDark : Colors.white,
+                          filled: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Type Dropdown
+                      Text(
+                        'Type',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: shopType,
+                        decoration: InputDecoration(
+                          fillColor: isDark ? AppColors.inputDark : Colors.white,
+                          filled: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                        ),
+                        icon: Icon(
+                          LucideIcons.chevronDown,
+                          size: 18,
+                          color: isDark ? Colors.white : const Color(0xFF334155),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'full_erp',
+                            child: Text('Full ERP', style: TextStyle(fontSize: 13)),
+                          ),
+                          DropdownMenuItem(
+                            value: 'simple_cash',
+                            child: Text('Simple Cash', style: TextStyle(fontSize: 13)),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setDialogState(() => shopType = val);
+                        },
+                      ),
+                      const SizedBox(height: 18),
+
+                      // + Add Button
+                      SizedBox(
+                        height: 48,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF24B489),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final name = nameController.text.trim();
+                            if (name.isEmpty) return;
+                            final cashVal = double.tryParse(cashController.text.trim()) ?? 0.0;
+                            final repo = ShopRepository();
+                            final newShop = ShopModel(
+                              id: 'shop-${DateTime.now().millisecondsSinceEpoch}',
+                              name: name,
+                              shopType: shopType,
+                              openingCash: cashVal,
+                              createdAt: DateTime.now(),
+                            );
+                            await repo.saveShop(newShop);
+                            if (!mounted) return;
+                            context.read<ShopBloc>().add(LoadShops());
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Shop added successfully.'),
+                              ),
+                            );
+                          },
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(LucideIcons.plus, size: 18),
+                              SizedBox(width: 6),
+                              Text(
+                                'Add',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // 3. Shop List Container Card
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.inputDark : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: _shops.isEmpty
+                              ? const Center(
+                                  child: Text(
+                                    'No shops found.',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  padding: const EdgeInsets.all(12),
+                                  itemCount: _shops.length,
+                                  separatorBuilder: (context, index) => const Divider(
+                                    height: 1,
+                                    color: Color(0xFFF1F5F9),
+                                  ),
+                                  itemBuilder: (context, idx) {
+                                    final s = _shops[idx];
+                                    final isSimple = s.shopType == 'simple_cash';
+                                    final openingVal = s.openingCash ?? (isSimple ? 3000.0 : 5000.0);
+                                    final formattedCash = NumberFormat('#,##0.00').format(openingVal);
+
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      child: Row(
+                                        children: [
+                                          // Left info
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        s.name,
+                                                        style: TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 14,
+                                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                                        ),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFCCFBF1),
+                                                        borderRadius: BorderRadius.circular(10),
+                                                      ),
+                                                      child: Text(
+                                                        isSimple ? 'CASH' : 'ERP',
+                                                        style: const TextStyle(
+                                                          color: Color(0xFF0D9488),
+                                                          fontSize: 9,
+                                                          fontWeight: FontWeight.w800,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  'Opening · SAR  $formattedCash',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+
+                                          // Dropdown selector
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                            decoration: BoxDecoration(
+                                              color: isDark ? AppColors.cardDark : const Color(0xFFF8FAFC),
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                              ),
+                                            ),
+                                            child: DropdownButtonHideUnderline(
+                                              child: DropdownButton<String>(
+                                                value: s.shopType ?? 'full_erp',
+                                                isDense: true,
+                                                icon: const Icon(LucideIcons.chevronDown, size: 14),
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                                ),
+                                                items: const [
+                                                  DropdownMenuItem(
+                                                    value: 'full_erp',
+                                                    child: Text('Full ERP'),
+                                                  ),
+                                                  DropdownMenuItem(
+                                                    value: 'simple_cash',
+                                                    child: Text('Simple Cash'),
+                                                  ),
+                                                ],
+                                                onChanged: (newType) async {
+                                                  if (newType != null && newType != s.shopType) {
+                                                    final repo = ShopRepository();
+                                                    await repo.saveShop(s.copyWith(shopType: newType));
+                                                    if (!mounted) return;
+                                                    context.read<ShopBloc>().add(LoadShops());
+                                                    setDialogState(() {});
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+
+                                          // Delete icon button
+                                          IconButton(
+                                            icon: const Icon(
+                                              LucideIcons.trash2,
+                                              size: 16,
+                                              color: Color(0xFF94A3B8),
+                                            ),
+                                            onPressed: () async {
+                                              final repo = ShopRepository();
+                                              await repo.saveShop(
+                                                s.copyWith(isDeleted: true),
+                                              );
+                                              if (!mounted) return;
+                                              context.read<ShopBloc>().add(
+                                                LoadShops(),
+                                              );
+                                              Navigator.pop(context);
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('Shop deleted.'),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -2444,21 +1560,391 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _showManageCashiers(String currentShopId) {
+  void _showManageCashiers(String initialShopId) {
+    String selectedShopId = _shops.any((s) => s.id == initialShopId)
+        ? initialShopId
+        : (_shops.isNotEmpty ? _shops.first.id : '');
+    final searchController = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final query = searchController.text.trim().toLowerCase();
+            final filteredShops = _shops.where((s) {
+              return s.name.toLowerCase().contains(query);
+            }).toList();
+
+            final selectedShop = _shops.firstWhere(
+              (s) => s.id == selectedShopId,
+              orElse: () => ShopModel(
+                id: '',
+                name: 'Main Store',
+                createdAt: DateTime.now(),
+              ),
+            );
+
+            final activeCashiers = _cashiers
+                .where((c) => c.shopId == selectedShopId && !c.isDeleted)
+                .toList();
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              backgroundColor: isDark ? AppColors.cardDark : const Color(0xFFFAFAFA),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header title & Close Button
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Cashiers',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              LucideIcons.x,
+                              size: 18,
+                              color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Outer Card Container
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.inputDark : Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Inner Header: Cashiers + Add cashier button
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        LucideIcons.users,
+                                        size: 20,
+                                        color: Color(0xFF0D9488),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Cashiers',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF24B489),
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      _showAddCashierDialog(
+                                        selectedShopId,
+                                        onCashierAdded: () {
+                                          setDialogState(() {});
+                                        },
+                                      );
+                                    },
+                                    icon: const Icon(LucideIcons.plus, size: 16),
+                                    label: const Text(
+                                      'Add cashier',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+
+                              // Search Bar
+                              TextField(
+                                controller: searchController,
+                                onChanged: (_) => setDialogState(() {}),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Search shops...',
+                                  hintStyle: TextStyle(
+                                    color: isDark ? Colors.grey.shade500 : const Color(0xFF94A3B8),
+                                    fontSize: 13,
+                                  ),
+                                  prefixIcon: Icon(
+                                    LucideIcons.search,
+                                    size: 16,
+                                    color: isDark ? Colors.grey.shade400 : const Color(0xFF94A3B8),
+                                  ),
+                                  fillColor: isDark ? AppColors.cardDark : const Color(0xFFFAFAFA),
+                                  filled: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide(
+                                      color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide(
+                                      color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+
+                              // SHOPS Section Card
+                              Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 12, top: 10, bottom: 6),
+                                      child: Text(
+                                        'SHOPS',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ),
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(maxHeight: 140),
+                                      child: filteredShops.isEmpty
+                                          ? const Padding(
+                                              padding: EdgeInsets.all(12.0),
+                                              child: Text('No shops found.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                            )
+                                          : ListView.builder(
+                                              shrinkWrap: true,
+                                              padding: EdgeInsets.zero,
+                                              itemCount: filteredShops.length,
+                                              itemBuilder: (context, idx) {
+                                                final shop = filteredShops[idx];
+                                                final isSelected = shop.id == selectedShopId;
+                                                final count = _cashiers
+                                                    .where((c) => c.shopId == shop.id && !c.isDeleted)
+                                                    .length;
+
+                                                return InkWell(
+                                                  onTap: () {
+                                                    setDialogState(() {
+                                                      selectedShopId = shop.id;
+                                                    });
+                                                  },
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                                    decoration: BoxDecoration(
+                                                      color: isSelected
+                                                          ? (isDark ? AppColors.primary.withValues(alpha: 0.2) : const Color(0xFFE6F4F1))
+                                                          : Colors.transparent,
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Container(
+                                                          padding: const EdgeInsets.all(6),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFFCCFBF1),
+                                                            borderRadius: BorderRadius.circular(10),
+                                                          ),
+                                                          child: const Icon(
+                                                            LucideIcons.store,
+                                                            size: 14,
+                                                            color: Color(0xFF0D9488),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 10),
+                                                        Expanded(
+                                                          child: Text(
+                                                            shop.name,
+                                                            style: TextStyle(
+                                                              fontSize: 13,
+                                                              fontWeight: FontWeight.w600,
+                                                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: isDark ? Colors.grey.shade800 : const Color(0xFFF1F5F9),
+                                                            borderRadius: BorderRadius.circular(10),
+                                                          ),
+                                                          child: Text(
+                                                            '$count',
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: isDark ? Colors.grey.shade300 : const Color(0xFF64748B),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+
+                              // CASHIERS OF [SHOP NAME] Section Card
+                              Expanded(
+                                child: Container(
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 12, top: 10, bottom: 6),
+                                        child: Text(
+                                          'CASHIERS OF ${selectedShop.name.toUpperCase()}',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                            letterSpacing: 0.6,
+                                          ),
+                                        ),
+                                      ),
+                                      const Divider(height: 1),
+                                      Expanded(
+                                        child: activeCashiers.isEmpty
+                                            ? const Center(
+                                                child: Text(
+                                                  'No cashiers yet.',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: Color(0xFF64748B),
+                                                  ),
+                                                ),
+                                              )
+                                            : ListView.separated(
+                                                padding: const EdgeInsets.all(8),
+                                                itemCount: activeCashiers.length,
+                                                separatorBuilder: (context, idx) => const Divider(height: 1),
+                                                itemBuilder: (context, idx) {
+                                                  final cashier = activeCashiers[idx];
+                                                  return ListTile(
+                                                    dense: true,
+                                                    leading: const CircleAvatar(
+                                                      radius: 12,
+                                                      backgroundColor: Color(0xFF24B489),
+                                                      child: Icon(
+                                                        LucideIcons.user,
+                                                        size: 12,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                    title: Text(
+                                                      cashier.name,
+                                                      style: TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 13,
+                                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                                      ),
+                                                    ),
+                                                    trailing: IconButton(
+                                                      icon: const Icon(
+                                                        LucideIcons.trash2,
+                                                        size: 16,
+                                                        color: Color(0xFF94A3B8),
+                                                      ),
+                                                      onPressed: () async {
+                                                        final repo = ShopRepository();
+                                                        await repo.saveCashier(
+                                                          cashier.copyWith(isDeleted: true),
+                                                        );
+                                                        if (!mounted) return;
+                                                        context.read<ShopBloc>().add(LoadShops());
+                                                        setDialogState(() {});
+                                                      },
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showAddCashierDialog(String preselectedShopId, {required VoidCallback onCashierAdded}) {
     final nameController = TextEditingController();
-    final shopCashiers = _cashiers
-        .where((c) => c.shopId == currentShopId)
-        .toList();
-    final shopName = _shops
-        .firstWhere(
-          (s) => s.id == currentShopId,
-          orElse: () => ShopModel(
-            id: '',
-            name: 'Selected Shop',
-            createdAt: DateTime.now(),
-          ),
-        )
-        .name;
+    String selectedShopId = _shops.any((s) => s.id == preselectedShopId)
+        ? preselectedShopId
+        : (_shops.isNotEmpty ? _shops.first.id : '');
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showDialog(
@@ -2471,231 +1957,170 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(24),
               ),
               backgroundColor: isDark ? AppColors.cardDark : Colors.white,
-              clipBehavior: Clip.antiAlias,
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.9,
-                height: 440,
-                child: Column(
-                  children: [
-                    // Header title banner
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 18,
-                      ),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.indigo, Color(0xFF6366F1)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Row(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header title & Close Button
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Expanded(
-                            child: Text(
-                              'Cashiers: $shopName',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                                fontSize: 15,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            'New cashier',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(
+                            icon: Icon(
                               LucideIcons.x,
-                              color: Colors.white,
                               size: 18,
+                              color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
                             ),
                             onPressed: () => Navigator.pop(context),
                           ),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 16),
 
-                    // Cashiers list
-                    Expanded(
-                      child: shopCashiers.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No cashier accounts found.',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: shopCashiers.length,
-                              itemBuilder: (context, idx) {
-                                final c = shopCashiers[idx];
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? AppColors.inputDark
-                                        : AppColors.inputLight,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isDark
-                                          ? AppColors.borderDark
-                                          : AppColors.borderLight,
-                                    ),
-                                  ),
-                                  child: ListTile(
-                                    dense: true,
-                                    leading: const CircleAvatar(
-                                      radius: 12,
-                                      backgroundColor: Colors.indigo,
-                                      child: Icon(
-                                        LucideIcons.user,
-                                        size: 12,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    title: Text(
-                                      c.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    trailing: IconButton(
-                                      icon: const Icon(
-                                        LucideIcons.trash2,
-                                        size: 16,
-                                        color: AppColors.destructive,
-                                      ),
-                                      onPressed: () async {
-                                        final repo = ShopRepository();
-                                        await repo.saveCashier(
-                                          c.copyWith(isDeleted: true),
-                                        );
-                                        if (!mounted) return;
-                                        context.read<ShopBloc>().add(
-                                          LoadShops(),
-                                        );
-                                        Navigator.pop(context);
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('Cashier deleted.'),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                );
-                              },
+                      // Name Field
+                      Text(
+                        'Name',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: nameController,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Anwer',
+                          hintStyle: TextStyle(
+                            color: isDark ? Colors.grey.shade500 : const Color(0xFF94A3B8),
+                            fontSize: 13,
+                          ),
+                          fillColor: isDark ? AppColors.inputDark : const Color(0xFFFAFAFA),
+                          filled: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
                             ),
-                    ),
-                    const Divider(height: 1),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF24B489),
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
 
-                    // Add New Cashier Block
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'ADD NEW CASHIER ACCOUNT',
+                      // Shop Field
+                      Text(
+                        'Shop',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: selectedShopId.isNotEmpty ? selectedShopId : null,
+                        decoration: InputDecoration(
+                          fillColor: isDark ? AppColors.inputDark : const Color(0xFFFAFAFA),
+                          filled: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                        ),
+                        icon: Icon(
+                          LucideIcons.chevronDown,
+                          size: 18,
+                          color: isDark ? Colors.white : const Color(0xFF64748B),
+                        ),
+                        items: _shops.map((s) {
+                          return DropdownMenuItem<String>(
+                            value: s.id,
+                            child: Text(s.name, style: const TextStyle(fontSize: 13)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setDialogState(() => selectedShopId = val);
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Save Button
+                      SizedBox(
+                        height: 46,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF24B489),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final name = nameController.text.trim();
+                            if (name.isEmpty || selectedShopId.isEmpty) return;
+                            final repo = ShopRepository();
+                            final newCashier = CashierModel(
+                              id: 'cashier-${DateTime.now().millisecondsSinceEpoch}',
+                              name: name,
+                              shopId: selectedShopId,
+                            );
+                            await repo.saveCashier(newCashier);
+                            if (!mounted) return;
+                            context.read<ShopBloc>().add(LoadShops());
+                            onCashierAdded();
+                            Navigator.pop(context);
+                          },
+                          child: const Text(
+                            'Save',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                              color: Colors.grey,
-                              letterSpacing: 0.5,
+                              fontSize: 15,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: nameController,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: 'Enter cashier display name...',
-                                    hintStyle: const TextStyle(
-                                      fontWeight: FontWeight.normal,
-                                      fontSize: 12,
-                                    ),
-                                    fillColor: isDark
-                                        ? AppColors.inputDark
-                                        : AppColors.inputLight,
-                                    filled: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? AppColors.borderDark
-                                            : AppColors.borderLight,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? AppColors.borderDark
-                                            : AppColors.borderLight,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.indigo,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                onPressed: () async {
-                                  final name = nameController.text.trim();
-                                  if (name.isEmpty) return;
-                                  final repo = ShopRepository();
-                                  final newCashier = CashierModel(
-                                    id: 'cashier-${DateTime.now().millisecondsSinceEpoch}',
-                                    name: name,
-                                    shopId: currentShopId,
-                                  );
-                                  await repo.saveCashier(newCashier);
-                                  if (!mounted) return;
-                                  context.read<ShopBloc>().add(LoadShops());
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Cashier account added successfully.',
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: const Text(
-                                  'Add',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -3707,7 +3132,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
         tExp = 0,
         tWd = 0,
         tDiff = 0;
-    final List<_ReportRow> rows = summaries.map((s) {
+    final List<ReportRow> rows = summaries.map((s) {
       final stats = _calculateShopStats(s.shop.id, bounds);
       tPos += stats.pos;
       tCash += stats.cash;
@@ -3719,7 +3144,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       tWd += stats.withdraw;
       tDiff += stats.diff;
 
-      return _ReportRow(
+      return ReportRow(
         name: s.shop.name,
         pos: stats.pos,
         cash: stats.cash,
@@ -4568,7 +3993,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
           child: FloatingActionButton(
             backgroundColor: AppColors.primary,
             elevation: 0,
-            child: const Icon(LucideIcons.plus, color: Colors.white, size: 24),
+            child: const Icon(LucideIcons.shoppingCart, color: Colors.white, size: 24),
             onPressed: () {
               // Check active shop mode for FAB
               final currShop = _shops.firstWhere(
@@ -4773,6 +4198,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                           color: isDark ? AppColors.cardDark : Colors.white,
                           elevation: 8,
                           onSelected: (String val) {
+                            if (val == 'new_entry') _showEntryFormSheet(defaultShopId);
                             if (val == 'shops') _showManageShops();
                             if (val == 'cashiers') _showManageCashiers(defaultShopId);
                             if (val == 'categories') _showManageCategories();
@@ -4783,84 +4209,205 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                             if (val == 'share') _shareReport(shopCards, bounds);
                           },
                           itemBuilder: (BuildContext context) => [
-                            PopupMenuItem(
-                              value: 'import',
+                            // 1. New Entry
+                            PopupMenuItem<String>(
+                              value: 'new_entry',
+                              height: 40,
                               child: Row(
                                 children: [
-                                  Icon(LucideIcons.fileSpreadsheet, size: 16, color: Colors.green.shade600),
-                                  const SizedBox(width: 10),
-                                  const Text('Import Sales', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                  Icon(LucideIcons.plus, size: 18, color: AppColors.primary),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'New Entry',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            PopupMenuItem(
-                              value: 'report',
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.barChart3, size: 16, color: Colors.blue.shade600),
-                                  const SizedBox(width: 10),
-                                  const Text('Generate Report', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                ],
+                            const PopupMenuDivider(height: 1),
+
+                            // 2. SHOP TOOLS Header
+                            PopupMenuItem<String>(
+                              enabled: false,
+                              height: 32,
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 6, bottom: 2),
+                                child: Text(
+                                  'SHOP TOOLS',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
                               ),
                             ),
-                            PopupMenuItem(
-                              value: 'excel',
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.fileDown, size: 16, color: Colors.teal.shade600),
-                                  const SizedBox(width: 10),
-                                  const Text('Export Excel', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'pdf',
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.fileText, size: 16, color: Colors.red.shade600),
-                                  const SizedBox(width: 10),
-                                  const Text('Export PDF', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'share',
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.share2, size: 16, color: Colors.amber.shade700),
-                                  const SizedBox(width: 10),
-                                  const Text('Share Report', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuDivider(),
-                            const PopupMenuItem(
+
+                            // 3. Manage Shops
+                            PopupMenuItem<String>(
                               value: 'shops',
+                              height: 40,
                               child: Row(
                                 children: [
-                                  Icon(LucideIcons.store, size: 16),
-                                  SizedBox(width: 10),
-                                  Text('Manage Shops', style: TextStyle(fontSize: 13)),
+                                  Icon(LucideIcons.store, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Manage Shops',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            const PopupMenuItem(
+
+                            // 4. Cashiers
+                            PopupMenuItem<String>(
                               value: 'cashiers',
+                              height: 40,
                               child: Row(
                                 children: [
-                                  Icon(LucideIcons.userCheck, size: 16),
-                                  SizedBox(width: 10),
-                                  Text('Manage Cashiers', style: TextStyle(fontSize: 13)),
+                                  Icon(LucideIcons.wallet, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Cashiers',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            const PopupMenuItem(
+
+                            // 5. Categories
+                            PopupMenuItem<String>(
                               value: 'categories',
+                              height: 40,
                               child: Row(
                                 children: [
-                                  Icon(LucideIcons.tag, size: 16),
-                                  SizedBox(width: 10),
-                                  Text('Manage Categories', style: TextStyle(fontSize: 13)),
+                                  Icon(LucideIcons.box, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Categories',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const PopupMenuDivider(height: 1),
+
+                            // 6. Import Sales
+                            PopupMenuItem<String>(
+                              value: 'import',
+                              height: 40,
+                              child: Row(
+                                children: [
+                                  Icon(LucideIcons.fileSpreadsheet, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Import Sales',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // 7. Generate Report
+                            PopupMenuItem<String>(
+                              value: 'report',
+                              height: 40,
+                              child: Row(
+                                children: [
+                                  Icon(LucideIcons.barChart3, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Generate Report',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const PopupMenuDivider(height: 1),
+
+                            // 8. Export Excel
+                            PopupMenuItem<String>(
+                              value: 'excel',
+                              height: 40,
+                              child: Row(
+                                children: [
+                                  Icon(LucideIcons.fileDown, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Export Excel',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // 9. Export PDF
+                            PopupMenuItem<String>(
+                              value: 'pdf',
+                              height: 40,
+                              child: Row(
+                                children: [
+                                  Icon(LucideIcons.fileText, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Export PDF',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // 10. Share Report
+                            PopupMenuItem<String>(
+                              value: 'share',
+                              height: 40,
+                              child: Row(
+                                children: [
+                                  Icon(LucideIcons.share2, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Share Report',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -5733,119 +5280,4 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       ),
     );
   }
-}
-
-// Helper Class definitions for clean state mapping
-
-class DateRangeBounds {
-  final DateTime from;
-  final DateTime to;
-  DateRangeBounds({required this.from, required this.to});
-}
-
-class ShopCardSummary {
-  final ShopModel shop;
-  final double cashPosition;
-  final double expectedBank;
-  final DateTime? lastDate;
-
-  ShopCardSummary({
-    required this.shop,
-    required this.cashPosition,
-    required this.expectedBank,
-    this.lastDate,
-  });
-}
-
-class DuplicateEntry {
-  final bool isHard;
-  final String label;
-  final String message;
-  final double amount;
-  final ShopEntryModel existingEntry;
-
-  DuplicateEntry({
-    required this.isHard,
-    required this.label,
-    required this.message,
-    required this.amount,
-    required this.existingEntry,
-  });
-}
-
-class ParsedRowMock {
-  final int idx;
-  final String date;
-  final String shopName;
-  final String cashierName;
-  final double pos;
-  final double cash;
-  final double bank;
-  final double credit;
-  final double total;
-  final double diff;
-  final String status;
-  final String tooltip;
-  ParsedRowMock({
-    required this.idx,
-    required this.date,
-    required this.shopName,
-    required this.cashierName,
-    required this.pos,
-    required this.cash,
-    required this.bank,
-    required this.credit,
-    required this.total,
-    required this.diff,
-    required this.status,
-    required this.tooltip,
-  });
-}
-
-class ShopStats {
-  final double pos;
-  final double cash;
-  final double bank;
-  final double credit;
-  final double totalSale;
-  final double purchase;
-  final double expense;
-  final double withdraw;
-  final double diff;
-  ShopStats({
-    required this.pos,
-    required this.cash,
-    required this.bank,
-    required this.credit,
-    required this.totalSale,
-    required this.purchase,
-    required this.expense,
-    required this.withdraw,
-    required this.diff,
-  });
-}
-
-class _ReportRow {
-  final String name;
-  final double pos;
-  final double cash;
-  final double bank;
-  final double credit;
-  final double total;
-  final double purchase;
-  final double expense;
-  final double withdraw;
-  final double diff;
-  _ReportRow({
-    required this.name,
-    required this.pos,
-    required this.cash,
-    required this.bank,
-    required this.credit,
-    required this.total,
-    required this.purchase,
-    required this.expense,
-    required this.withdraw,
-    required this.diff,
-  });
 }

@@ -20,15 +20,16 @@ class ShopModelAdapter extends TypeAdapter<ShopModel> {
       id: fields[0] as String,
       name: fields[1] as String,
       shopType: fields[2] as String?,
-      isDeleted: fields[3] as bool,
+      isDeleted: fields[3] as bool? ?? false,
       createdAt: fields[4] as DateTime,
+      openingCash: (fields[5] as num?)?.toDouble(),
     );
   }
 
   @override
   void write(BinaryWriter writer, ShopModel obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -38,7 +39,9 @@ class ShopModelAdapter extends TypeAdapter<ShopModel> {
       ..writeByte(3)
       ..write(obj.isDeleted)
       ..writeByte(4)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(5)
+      ..write(obj.openingCash);
   }
 
   @override

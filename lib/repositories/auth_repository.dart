@@ -21,6 +21,7 @@ class AuthRepository {
   Future<UserModel> signIn({
     required String identifier,
     required String password,
+    bool rememberMe = true,
   }) async {
     final res = await _apiClient.login(
       identifier: identifier,
@@ -32,15 +33,39 @@ class AuthRepository {
       final user = UserModel.fromJson(userMap);
       _currentUser = user;
 
-      // Save user profile in Hive box
+      // Save user profile and credentials in Hive box
       final box = await Hive.openBox(_authBoxName);
       await box.put('user_profile', user.toJson());
+      await box.put('remember_me', rememberMe);
+
+      if (rememberMe) {
+        await box.put('saved_identifier', identifier);
+        await box.put('saved_password', password);
+      } else {
+        await box.delete('saved_identifier');
+        await box.delete('saved_password');
+      }
 
       return user;
     } else {
       final errorMsg = res['message'] as String? ?? 'Invalid credentials or server error';
       throw Exception(errorMsg);
     }
+  }
+
+  Future<Map<String, String>?> getSavedCredentials() async {
+    final box = await Hive.openBox(_authBoxName);
+    final identifier = box.get('saved_identifier') as String?;
+    final password = box.get('saved_password') as String?;
+    final rememberMe = box.get('remember_me') as bool? ?? false;
+
+    if (rememberMe && identifier != null && identifier.isNotEmpty && password != null && password.isNotEmpty) {
+      return {
+        'identifier': identifier,
+        'password': password,
+      };
+    }
+    return null;
   }
 
   Future<void> signUp({
@@ -55,6 +80,6 @@ class AuthRepository {
     await _apiClient.setToken(null);
     _currentUser = null;
     final box = await Hive.openBox(_authBoxName);
-    await box.delete('user_profile');
+    await box.clear();
   }
 }

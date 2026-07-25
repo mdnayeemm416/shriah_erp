@@ -211,10 +211,15 @@ class _SplashScreenState extends State<SplashScreen>
     _logoCtrl.forward().then((_) => _textCtrl.forward());
 
     // Hold the splash screen for 3.0 seconds total to ensure premium experience is visible
-    Future.delayed(const Duration(milliseconds: 3000), () {
+    Future.delayed(const Duration(milliseconds: 3000), () async {
       if (!mounted) return;
       final authCubit = context.read<AuthCubit>();
-      final authState = authCubit.state;
+      AuthState authState = authCubit.state;
+      if (authState is AuthLoading) {
+        authState = await authCubit.stream.firstWhere((s) => s is! AuthLoading);
+      }
+
+      if (!mounted) return;
       if (authState is AuthAuthenticated) {
         Navigator.pushReplacement(
           context,

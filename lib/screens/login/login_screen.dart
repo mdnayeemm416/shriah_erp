@@ -5,6 +5,7 @@ import '../../blocs/auth/auth_cubit.dart';
 import '../../blocs/auth/auth_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/shadows.dart';
+import '../../repositories/auth_repository.dart';
 import '../shell.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -22,6 +23,24 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _rememberMe = true;
 
   @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    final authRepo = context.read<AuthRepository>();
+    final creds = await authRepo.getSavedCredentials();
+    if (creds != null && mounted) {
+      setState(() {
+        _identifierController.text = creds['identifier'] ?? '';
+        _passwordController.text = creds['password'] ?? '';
+        _rememberMe = true;
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _identifierController.dispose();
     _passwordController.dispose();
@@ -31,8 +50,9 @@ class _LoginScreenState extends State<LoginScreen> {
   void _submit() {
     if (_formKey.currentState!.validate()) {
       context.read<AuthCubit>().login(
-            _identifierController.text,
+            _identifierController.text.trim(),
             _passwordController.text,
+            rememberMe: _rememberMe,
           );
     }
   }

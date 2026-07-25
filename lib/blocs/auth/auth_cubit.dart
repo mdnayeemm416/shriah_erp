@@ -14,6 +14,21 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> checkAuth() async {
     emit(AuthLoading());
     try {
+      final savedCreds = await authRepository.getSavedCredentials();
+      if (savedCreds != null) {
+        try {
+          final user = await authRepository.signIn(
+            identifier: savedCreds['identifier']!,
+            password: savedCreds['password']!,
+            rememberMe: true,
+          );
+          emit(AuthAuthenticated(user));
+          return;
+        } catch (_) {
+          // If online login fails (e.g. offline/network issue), check cached session
+        }
+      }
+
       final box = await Hive.openBox('auth');
       final token = box.get('auth_token') as String?;
       final userProfileMap = box.get('user_profile');
@@ -30,12 +45,13 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
-  Future<void> login(String identifier, String password) async {
+  Future<void> login(String identifier, String password, {bool rememberMe = true}) async {
     emit(AuthLoading());
     try {
       final user = await authRepository.signIn(
         identifier: identifier,
         password: password,
+        rememberMe: rememberMe,
       );
       emit(AuthAuthenticated(user));
     } catch (e) {
