@@ -535,7 +535,7 @@ class AppShellState extends State<AppShell> {
   Widget _buildDrawerItem(int index, IconData icon, String label, bool isDark) {
     final isSelected = _selectedIndex == index;
     final activeBg = AppColors.primary.withAlpha(25);
-    final activeFg = AppColors.primary;
+    const activeFg = AppColors.primary;
     final inactiveFg = isDark ? Colors.white70 : Colors.black87;
 
     return Padding(

@@ -131,7 +131,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                     const SizedBox(height: 12),
                     if (_selectedKind == 'expense') ...[
                       DropdownButtonFormField<String>(
-                        value: _selectedCategory,
+                        initialValue: _selectedCategory,
                         decoration: const InputDecoration(labelText: 'Category'),
                         items: _categories.map((c) {
                           return DropdownMenuItem(value: c, child: Text(c));

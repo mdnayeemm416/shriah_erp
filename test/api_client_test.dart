@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:saudi/core/api/api_client.dart';
+import 'package:shriah_erp/core/api/api_client.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

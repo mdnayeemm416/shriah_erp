@@ -58,7 +58,7 @@ void main() async {
   final priceCompareRepo = PriceCompareRepository();
   final wholesaleRepo = WholesaleRepository();
 
-  // 2. Initialize Hive schemas & mock seed data
+  // 2. Initialize Hive schemas & API sync repositories
   await shopRepo.initialize();
   await employeeRepo.initialize();
   await productRepo.initialize();

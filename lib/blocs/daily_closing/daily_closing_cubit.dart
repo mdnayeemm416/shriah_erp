@@ -240,7 +240,7 @@ class DailyClosingCubit extends Cubit<DailyClosingState> {
         final changesAfterClosing = [
           ...dayShopEntries.map((e) => e.createdAt),
           ...dayCompanyTxns.map((t) => t.createdAt),
-        ].any((ts) => ts != null && ts.isAfter(closedAt));
+        ].any((ts) => ts.isAfter(closedAt));
         lockWarning = changesAfterClosing;
       }
 

@@ -24,7 +24,7 @@ class EmployeeRepository {
     Box<EmployeeModel> employeesBox,
     Box<EmployeeEntryModel> entriesBox,
   ) async {
-    final uuid = const Uuid();
+    const uuid = Uuid();
 
     final emp1 = EmployeeModel(id: 'emp-1', name: 'Faruk Ahmed', shopId: 'shop-1', monthlySalary: 3500.0, createdAt: DateTime.now().subtract(const Duration(days: 60)));
     final emp2 = EmployeeModel(id: 'emp-2', name: 'Mohammad Al-Otaibi', shopId: 'shop-1', monthlySalary: 5500.0, createdAt: DateTime.now().subtract(const Duration(days: 45)));

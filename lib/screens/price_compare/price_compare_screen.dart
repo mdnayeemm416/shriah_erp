@@ -4,7 +4,6 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
 
 import '../../blocs/price_compare/price_compare_cubit.dart';
-import '../../models/price_compare_models.dart';
 import '../../core/theme/app_colors.dart';
 
 class PriceCompareScreen extends StatefulWidget {

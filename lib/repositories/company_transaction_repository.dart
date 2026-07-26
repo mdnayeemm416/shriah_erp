@@ -15,7 +15,7 @@ class CompanyTransactionRepository {
   }
 
   Future<void> _seedData(Box<CompanyTransactionModel> box) async {
-    final uuid = const Uuid();
+    const uuid = Uuid();
     final now = DateTime.now();
 
     final txns = [

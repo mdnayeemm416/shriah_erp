@@ -90,9 +90,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
 
   Future<void> deleteCustomer(String customerId) async {
     try {
-      final existing = state.customers.firstWhere((c) => c.id == customerId);
-      final updated = existing.copyWith(isDeleted: true);
-      await wholesaleRepo.saveCustomer(updated);
+      await wholesaleRepo.deleteCustomer(customerId);
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -160,9 +158,6 @@ class WholesaleCubit extends Cubit<WholesaleState> {
         }
       }
 
-      // If it's a credit sale (due / partial due) and we have customerId,
-      // and we paid something (paymentMethod != 'due' but with remaining due), 
-      // or if paymentMethod == 'due', we check if we need to log a payment record
       final paidAmount = total - discount - dueAmount;
       if (customerId != null && paidAmount > 0) {
         final payment = WholesalePaymentModel(
@@ -185,8 +180,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
   Future<void> cancelSale(String saleId) async {
     try {
       final sale = state.sales.firstWhere((s) => s.id == saleId);
-      final updated = sale.copyWith(status: 'cancelled');
-      await wholesaleRepo.saveSale(updated);
+      await wholesaleRepo.cancelSale(saleId);
 
       // Restore product stock levels
       for (final item in sale.items) {
@@ -306,8 +300,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
   }) async {
     try {
       // 1. Mark order as confirmed / delivered
-      final updatedOrder = order.copyWith(status: 'confirmed');
-      await wholesaleRepo.saveOrder(updatedOrder);
+      await wholesaleRepo.updateOrderStatus(order.id, 'confirmed');
 
       // 2. Find or create a client matching name / mobile if they exist
       String? customerId;
@@ -349,9 +342,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
 
   Future<void> cancelOrder(String orderId) async {
     try {
-      final order = state.orders.firstWhere((o) => o.id == orderId);
-      final updated = order.copyWith(status: 'cancelled');
-      await wholesaleRepo.saveOrder(updated);
+      await wholesaleRepo.updateOrderStatus(orderId, 'cancelled');
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -409,9 +400,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
 
   Future<void> deleteSale(String saleId) async {
     try {
-      final sale = state.sales.firstWhere((s) => s.id == saleId);
-      final updated = sale.copyWith(isDeleted: true);
-      await wholesaleRepo.saveSale(updated);
+      await wholesaleRepo.deleteSale(saleId);
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -429,9 +418,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
 
   Future<void> deletePurchase(String purchaseId) async {
     try {
-      final purchase = state.purchases.firstWhere((p) => p.id == purchaseId);
-      final updated = purchase.copyWith(isDeleted: true);
-      await wholesaleRepo.savePurchase(updated);
+      await wholesaleRepo.deletePurchase(purchaseId);
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -449,9 +436,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
 
   Future<void> deletePayment(String paymentId) async {
     try {
-      final payment = state.payments.firstWhere((p) => p.id == paymentId);
-      final updated = payment.copyWith(isDeleted: true);
-      await wholesaleRepo.savePayment(updated);
+      await wholesaleRepo.deletePayment(paymentId);
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -469,9 +454,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
 
   Future<void> deleteOrder(String orderId) async {
     try {
-      final order = state.orders.firstWhere((o) => o.id == orderId);
-      final updated = order.copyWith(isDeleted: true);
-      await wholesaleRepo.saveOrder(updated);
+      await wholesaleRepo.deleteOrder(orderId);
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));

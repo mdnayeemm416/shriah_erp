@@ -17,7 +17,7 @@ class ProductRepository {
   }
 
   Future<void> _seedData(Box<ProductModel> box) async {
-    final uuid = const Uuid();
+    const uuid = Uuid();
     final now = DateTime.now();
 
     final items = [

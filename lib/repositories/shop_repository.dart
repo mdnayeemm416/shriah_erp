@@ -28,7 +28,7 @@ class ShopRepository {
     Box<CashierModel> cashiersBox,
     Box<ShopEntryModel> entriesBox,
   ) async {
-    final uuid = const Uuid();
+    const uuid = Uuid();
 
     // 1. Seed Shops
     final shop1 = ShopModel(id: 'shop-1', name: 'Main Shop Riyadh', shopType: 'full_erp', createdAt: DateTime.now().subtract(const Duration(days: 30)));

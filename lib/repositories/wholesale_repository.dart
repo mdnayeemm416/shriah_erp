@@ -1,5 +1,4 @@
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:uuid/uuid.dart';
 import '../core/api/api_client.dart';
 import '../models/wholesale_models.dart';
 
@@ -14,94 +13,30 @@ class WholesaleRepository {
 
   Future<void> initialize() async {
     // Register adapters
-    Hive.registerAdapter(WholesaleCustomerModelAdapter());
-    Hive.registerAdapter(WholesalePaymentModelAdapter());
-    Hive.registerAdapter(WholesaleSaleItemModelAdapter());
-    Hive.registerAdapter(WholesaleSaleModelAdapter());
-    Hive.registerAdapter(WholesalePurchaseModelAdapter());
-    Hive.registerAdapter(WholesaleOrderModelAdapter());
-    Hive.registerAdapter(WholesaleCategoryModelAdapter());
+    if (!Hive.isAdapterRegistered(14)) Hive.registerAdapter(WholesaleCustomerModelAdapter());
+    if (!Hive.isAdapterRegistered(15)) Hive.registerAdapter(WholesalePaymentModelAdapter());
+    if (!Hive.isAdapterRegistered(17)) Hive.registerAdapter(WholesaleSaleItemModelAdapter());
+    if (!Hive.isAdapterRegistered(16)) Hive.registerAdapter(WholesaleSaleModelAdapter());
+    if (!Hive.isAdapterRegistered(18)) Hive.registerAdapter(WholesalePurchaseModelAdapter());
+    if (!Hive.isAdapterRegistered(19)) Hive.registerAdapter(WholesaleOrderModelAdapter());
+    if (!Hive.isAdapterRegistered(20)) Hive.registerAdapter(WholesaleCategoryModelAdapter());
 
     // Open boxes
-    final customersBox = await Hive.openBox<WholesaleCustomerModel>(_customersBoxName);
-    final paymentsBox = await Hive.openBox<WholesalePaymentModel>(_paymentsBoxName);
-    final salesBox = await Hive.openBox<WholesaleSaleModel>(_salesBoxName);
-    final purchasesBox = await Hive.openBox<WholesalePurchaseModel>(_purchasesBoxName);
-    final ordersBox = await Hive.openBox<WholesaleOrderModel>(_ordersBoxName);
-    final categoriesBox = await Hive.openBox<WholesaleCategoryModel>(_categoriesBoxName);
-
-    // Seed mock data if empty
-    if (customersBox.isEmpty && ordersBox.isEmpty && categoriesBox.isEmpty) {
-      await _seedData(customersBox, paymentsBox, salesBox, purchasesBox, ordersBox, categoriesBox);
-    }
+    await Hive.openBox<WholesaleCustomerModel>(_customersBoxName);
+    await Hive.openBox<WholesalePaymentModel>(_paymentsBoxName);
+    await Hive.openBox<WholesaleSaleModel>(_salesBoxName);
+    await Hive.openBox<WholesalePurchaseModel>(_purchasesBoxName);
+    await Hive.openBox<WholesaleOrderModel>(_ordersBoxName);
+    await Hive.openBox<WholesaleCategoryModel>(_categoriesBoxName);
   }
 
-  Future<void> _seedData(
-    Box<WholesaleCustomerModel> customersBox,
-    Box<WholesalePaymentModel> paymentsBox,
-    Box<WholesaleSaleModel> salesBox,
-    Box<WholesalePurchaseModel> purchasesBox,
-    Box<WholesaleOrderModel> ordersBox,
-    Box<WholesaleCategoryModel> categoriesBox,
-  ) async {
-    final uuid = const Uuid();
-    final now = DateTime.now();
+  // --- Executive Dashboard Summary & Receivables ---
+  Future<Map<String, dynamic>?> getDashboardSummary() async {
+    return await _apiClient.getWholesaleDashboardSummary();
+  }
 
-    final cat1 = WholesaleCategoryModel(id: 'cat-1', name: 'Dairy & Milk', nameAr: 'الألبان والحليب', nameBn: 'দুগ্ধ ও দুধ', sortOrder: 1);
-    final cat2 = WholesaleCategoryModel(id: 'cat-2', name: 'Beverages', nameAr: 'المشروبات', nameBn: 'পানীয়', sortOrder: 2);
-    final cat3 = WholesaleCategoryModel(id: 'cat-3', name: 'Dry Groceries', nameAr: 'البقالة الجافة', nameBn: 'শুকনো মুদি', sortOrder: 3);
-    await categoriesBox.putAll({
-      cat1.id: cat1,
-      cat2.id: cat2,
-      cat3.id: cat3,
-    });
-
-    final cust1 = WholesaleCustomerModel(id: 'cust-1', name: 'Azzouz Supermarket', mobile: '966551234567', openingDue: 1500.0, createdAt: now);
-    final cust2 = WholesaleCustomerModel(id: 'cust-2', name: 'Riyadh Retail Corp', mobile: '966552345678', openingDue: 0.0, createdAt: now);
-    final cust3 = WholesaleCustomerModel(id: 'cust-3', name: 'Nujum Al-Madinah', mobile: '966553456789', openingDue: 800.0, createdAt: now);
-    await customersBox.putAll({
-      cust1.id: cust1,
-      cust2.id: cust2,
-      cust3.id: cust3,
-    });
-
-    final pay1 = WholesalePaymentModel(id: uuid.v4(), customerId: 'cust-1', amount: 500.0, kind: 'payment_in', notes: 'Cash deposit on account', createdAt: now.subtract(const Duration(days: 2)));
-    await paymentsBox.put(pay1.id, pay1);
-
-    final saleItem1 = WholesaleSaleItemModel(productId: 'prod-1', name: 'Almarai Fresh Milk 1L', qty: 10, price: 6.50, purchasePrice: 5.20);
-    final saleItem2 = WholesaleSaleItemModel(productId: 'prod-2', name: 'Lipton Yellow Label Tea 100 Bags', qty: 5, price: 15.00, purchasePrice: 12.00);
-    
-    final sale1 = WholesaleSaleModel(
-      id: uuid.v4(),
-      invoiceNumber: 1001,
-      customerId: 'cust-1',
-      customerName: 'Azzouz Supermarket',
-      customerMobile: '966551234567',
-      items: [saleItem1, saleItem2],
-      total: 140.0,
-      discount: 10.0,
-      dueAmount: 130.0,
-      paymentMethod: 'due',
-      createdAt: now.subtract(const Duration(days: 1)),
-    );
-    await salesBox.put(sale1.id, sale1);
-
-    final orderItem1 = WholesaleSaleItemModel(productId: 'prod-1', name: 'Almarai Fresh Milk 1L', qty: 20, price: 6.50, purchasePrice: 5.20);
-    final orderItem2 = WholesaleSaleItemModel(productId: 'prod-3', name: 'Sadia Chicken Breast 1kg', qty: 10, price: 26.95, purchasePrice: 22.10);
-    
-    final order1 = WholesaleOrderModel(
-      id: uuid.v4(),
-      orderNumber: 5001,
-      customerName: 'Khaled Bin Waleed Store',
-      customerMobile: '966559988776',
-      customerAddress: 'Olaya District, Riyadh',
-      items: [orderItem1, orderItem2],
-      total: 399.50,
-      notes: 'Please pack carefully and deliver by afternoon',
-      status: 'pending',
-      createdAt: now,
-    );
-    await ordersBox.put(order1.id, order1);
+  Future<List<dynamic>?> getReceivablesBreakdown() async {
+    return await _apiClient.getWholesaleReceivablesBreakdown();
   }
 
   // --- Customers CRUD ---
@@ -109,7 +44,8 @@ class WholesaleRepository {
     final box = Hive.box<WholesaleCustomerModel>(_customersBoxName);
     try {
       final remoteList = await _apiClient.getWholesaleCustomers();
-      if (remoteList != null && remoteList.isNotEmpty) {
+      if (remoteList != null) {
+        await box.clear();
         for (final item in remoteList) {
           if (item is Map<String, dynamic>) {
             final c = WholesaleCustomerModel.fromJson(item);
@@ -126,17 +62,63 @@ class WholesaleRepository {
   Future<void> saveCustomer(WholesaleCustomerModel customer) async {
     final box = Hive.box<WholesaleCustomerModel>(_customersBoxName);
     await box.put(customer.id, customer);
+    try {
+      await _apiClient.createWholesaleCustomer(customer.toJson());
+    } catch (_) {}
+  }
+
+  Future<void> deleteCustomer(String customerId) async {
+    final box = Hive.box<WholesaleCustomerModel>(_customersBoxName);
+    final customer = box.get(customerId);
+    if (customer != null) {
+      await box.put(customerId, customer.copyWith(isDeleted: true));
+    }
+    try {
+      await _apiClient.deleteWholesaleCustomer(customerId);
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> getCustomerStatement(String customerId) async {
+    return await _apiClient.getWholesaleCustomerStatement(customerId);
   }
 
   // --- Payments CRUD ---
   Future<List<WholesalePaymentModel>> getPayments() async {
     final box = Hive.box<WholesalePaymentModel>(_paymentsBoxName);
+    try {
+      final remoteList = await _apiClient.getWholesalePayments();
+      if (remoteList != null) {
+        await box.clear();
+        for (final item in remoteList) {
+          if (item is Map<String, dynamic>) {
+            final p = WholesalePaymentModel.fromJson(item);
+            if (p.id.isNotEmpty) {
+              await box.put(p.id, p);
+            }
+          }
+        }
+      }
+    } catch (_) {}
     return box.values.where((p) => !p.isDeleted).toList();
   }
 
   Future<void> savePayment(WholesalePaymentModel payment) async {
     final box = Hive.box<WholesalePaymentModel>(_paymentsBoxName);
     await box.put(payment.id, payment);
+    try {
+      await _apiClient.createWholesalePayment(payment.toJson());
+    } catch (_) {}
+  }
+
+  Future<void> deletePayment(String paymentId) async {
+    final box = Hive.box<WholesalePaymentModel>(_paymentsBoxName);
+    final payment = box.get(paymentId);
+    if (payment != null) {
+      await box.put(paymentId, payment.copyWith(isDeleted: true));
+    }
+    try {
+      await _apiClient.deleteWholesalePayment(paymentId);
+    } catch (_) {}
   }
 
   // --- Sales CRUD ---
@@ -144,7 +126,8 @@ class WholesaleRepository {
     final box = Hive.box<WholesaleSaleModel>(_salesBoxName);
     try {
       final remoteList = await _apiClient.getWholesaleSales();
-      if (remoteList != null && remoteList.isNotEmpty) {
+      if (remoteList != null) {
+        await box.clear();
         for (final item in remoteList) {
           if (item is Map<String, dynamic>) {
             final s = WholesaleSaleModel.fromJson(item);
@@ -161,6 +144,31 @@ class WholesaleRepository {
   Future<void> saveSale(WholesaleSaleModel sale) async {
     final box = Hive.box<WholesaleSaleModel>(_salesBoxName);
     await box.put(sale.id, sale);
+    try {
+      await _apiClient.createWholesaleSale(sale.toJson());
+    } catch (_) {}
+  }
+
+  Future<void> cancelSale(String saleId) async {
+    final box = Hive.box<WholesaleSaleModel>(_salesBoxName);
+    final sale = box.get(saleId);
+    if (sale != null) {
+      await box.put(saleId, sale.copyWith(status: 'cancelled'));
+    }
+    try {
+      await _apiClient.cancelWholesaleSale(saleId);
+    } catch (_) {}
+  }
+
+  Future<void> deleteSale(String saleId) async {
+    final box = Hive.box<WholesaleSaleModel>(_salesBoxName);
+    final sale = box.get(saleId);
+    if (sale != null) {
+      await box.put(saleId, sale.copyWith(isDeleted: true));
+    }
+    try {
+      await _apiClient.deleteWholesaleSale(saleId);
+    } catch (_) {}
   }
 
   // --- Sales Returns API Integration ---
@@ -190,33 +198,118 @@ class WholesaleRepository {
   // --- Purchases CRUD ---
   Future<List<WholesalePurchaseModel>> getPurchases() async {
     final box = Hive.box<WholesalePurchaseModel>(_purchasesBoxName);
+    try {
+      final remoteList = await _apiClient.getWholesalePurchases();
+      if (remoteList != null) {
+        await box.clear();
+        for (final item in remoteList) {
+          if (item is Map<String, dynamic>) {
+            final p = WholesalePurchaseModel.fromJson(item);
+            if (p.id.isNotEmpty) {
+              await box.put(p.id, p);
+            }
+          }
+        }
+      }
+    } catch (_) {}
     return box.values.where((p) => !p.isDeleted).toList();
   }
 
   Future<void> savePurchase(WholesalePurchaseModel purchase) async {
     final box = Hive.box<WholesalePurchaseModel>(_purchasesBoxName);
     await box.put(purchase.id, purchase);
+    try {
+      await _apiClient.createWholesalePurchase(purchase.toJson());
+    } catch (_) {}
+  }
+
+  Future<void> deletePurchase(String purchaseId) async {
+    final box = Hive.box<WholesalePurchaseModel>(_purchasesBoxName);
+    final purchase = box.get(purchaseId);
+    if (purchase != null) {
+      await box.put(purchaseId, purchase.copyWith(isDeleted: true));
+    }
+    try {
+      await _apiClient.deleteWholesalePurchase(purchaseId);
+    } catch (_) {}
   }
 
   // --- Orders CRUD ---
   Future<List<WholesaleOrderModel>> getOrders() async {
     final box = Hive.box<WholesaleOrderModel>(_ordersBoxName);
+    try {
+      final remoteList = await _apiClient.getWholesaleOrders();
+      if (remoteList != null) {
+        await box.clear();
+        for (final item in remoteList) {
+          if (item is Map<String, dynamic>) {
+            final o = WholesaleOrderModel.fromJson(item);
+            if (o.id.isNotEmpty) {
+              await box.put(o.id, o);
+            }
+          }
+        }
+      }
+    } catch (_) {}
     return box.values.where((o) => !o.isDeleted).toList();
   }
 
   Future<void> saveOrder(WholesaleOrderModel order) async {
     final box = Hive.box<WholesaleOrderModel>(_ordersBoxName);
     await box.put(order.id, order);
+    try {
+      await _apiClient.createWholesaleOrder(order.toJson());
+    } catch (_) {}
+  }
+
+  Future<void> updateOrderStatus(String orderId, String status) async {
+    final box = Hive.box<WholesaleOrderModel>(_ordersBoxName);
+    final order = box.get(orderId);
+    if (order != null) {
+      await box.put(orderId, order.copyWith(status: status));
+    }
+    try {
+      await _apiClient.updateWholesaleOrderStatus(orderId, status);
+    } catch (_) {}
+  }
+
+  Future<void> deleteOrder(String orderId) async {
+    final box = Hive.box<WholesaleOrderModel>(_ordersBoxName);
+    final order = box.get(orderId);
+    if (order != null) {
+      await box.put(orderId, order.copyWith(isDeleted: true));
+    }
+    try {
+      await _apiClient.deleteWholesaleOrder(orderId);
+    } catch (_) {}
   }
 
   // --- Categories CRUD ---
   Future<List<WholesaleCategoryModel>> getCategories() async {
     final box = Hive.box<WholesaleCategoryModel>(_categoriesBoxName);
+    try {
+      final remoteList = await _apiClient.getWholesaleCategories();
+      if (remoteList != null) {
+        await box.clear();
+        for (final item in remoteList) {
+          if (item is Map<String, dynamic>) {
+            final cat = WholesaleCategoryModel.fromJson(item);
+            if (cat.id.isNotEmpty) {
+              await box.put(cat.id, cat);
+            }
+          }
+        }
+      }
+    } catch (_) {}
     return box.values.toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   }
 
   Future<void> saveCategory(WholesaleCategoryModel category) async {
     final box = Hive.box<WholesaleCategoryModel>(_categoriesBoxName);
     await box.put(category.id, category);
+    try {
+      await _apiClient.createWholesaleCategory(category.toJson());
+    } catch (_) {}
   }
 }
+

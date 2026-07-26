@@ -145,6 +145,32 @@ class WholesalePaymentModel extends HiveObject {
     required this.createdAt,
   });
 
+  factory WholesalePaymentModel.fromJson(Map<String, dynamic> json) {
+    return WholesalePaymentModel(
+      id: json['id'] as String? ?? '',
+      customerId: json['customer_id'] as String? ?? json['customerId'] as String? ?? '',
+      amount: (json['amount'] as num? ?? 0.0).toDouble(),
+      kind: json['kind'] as String? ?? 'payment_in',
+      notes: json['notes'] as String?,
+      isDeleted: json['is_deleted'] as bool? ?? false,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'customer_id': customerId,
+      'amount': amount,
+      'kind': kind,
+      'notes': notes,
+      'is_deleted': isDeleted,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+
   WholesalePaymentModel copyWith({
     String? customerId,
     double? amount,
@@ -431,6 +457,41 @@ class WholesalePurchaseModel extends HiveObject {
     required this.createdAt,
   });
 
+  factory WholesalePurchaseModel.fromJson(Map<String, dynamic> json) {
+    var itemList = <WholesaleSaleItemModel>[];
+    if (json['items'] is List) {
+      itemList = (json['items'] as List)
+          .map((i) => WholesaleSaleItemModel.fromJson(i as Map<String, dynamic>))
+          .toList();
+    }
+
+    return WholesalePurchaseModel(
+      id: json['id'] as String? ?? '',
+      invoiceNumber: json['invoice_number'] as String? ?? '',
+      supplierName: json['supplier_name'] as String? ?? 'Supplier',
+      items: itemList,
+      total: (json['total'] as num? ?? 0.0).toDouble(),
+      notes: json['notes'] as String?,
+      isDeleted: json['is_deleted'] as bool? ?? false,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'invoice_number': invoiceNumber,
+      'supplier_name': supplierName,
+      'items': items.map((i) => i.toJson()).toList(),
+      'total': total,
+      'notes': notes,
+      'is_deleted': isDeleted,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+
   WholesalePurchaseModel copyWith({
     String? invoiceNumber,
     String? supplierName,
@@ -501,6 +562,54 @@ class WholesaleOrderModel extends HiveObject {
     required this.createdAt,
   });
 
+  factory WholesaleOrderModel.fromJson(Map<String, dynamic> json) {
+    int ordNum = 0;
+    if (json['order_number'] is int) {
+      ordNum = json['order_number'] as int;
+    } else if (json['order_number'] is String) {
+      ordNum = int.tryParse(json['order_number'] as String) ?? 0;
+    }
+
+    var itemList = <WholesaleSaleItemModel>[];
+    if (json['items'] is List) {
+      itemList = (json['items'] as List)
+          .map((i) => WholesaleSaleItemModel.fromJson(i as Map<String, dynamic>))
+          .toList();
+    }
+
+    return WholesaleOrderModel(
+      id: json['id'] as String? ?? '',
+      orderNumber: ordNum,
+      customerName: json['customer_name'] as String? ?? 'Customer',
+      customerMobile: json['customer_mobile'] as String? ?? '',
+      customerAddress: json['customer_address'] as String?,
+      items: itemList,
+      total: (json['total'] as num? ?? 0.0).toDouble(),
+      notes: json['notes'] as String?,
+      status: json['status'] as String? ?? 'pending',
+      isDeleted: json['is_deleted'] as bool? ?? false,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'order_number': orderNumber,
+      'customer_name': customerName,
+      'customer_mobile': customerMobile,
+      'customer_address': customerAddress,
+      'items': items.map((i) => i.toJson()).toList(),
+      'total': total,
+      'notes': notes,
+      'status': status,
+      'is_deleted': isDeleted,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+
   WholesaleOrderModel copyWith({
     int? orderNumber,
     String? customerName,
@@ -564,6 +673,32 @@ class WholesaleCategoryModel extends HiveObject {
     this.imageUrl,
     this.smartSection,
   });
+
+  factory WholesaleCategoryModel.fromJson(Map<String, dynamic> json) {
+    return WholesaleCategoryModel(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      nameAr: json['name_ar'] as String?,
+      nameBn: json['name_bn'] as String?,
+      sortOrder: json['sort_order'] as int? ?? 0,
+      isActive: json['is_active'] as bool? ?? true,
+      imageUrl: json['image_url'] as String?,
+      smartSection: json['smart_section'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'name_ar': nameAr,
+      'name_bn': nameBn,
+      'sort_order': sortOrder,
+      'is_active': isActive,
+      'image_url': imageUrl,
+      'smart_section': smartSection,
+    };
+  }
 
   WholesaleCategoryModel copyWith({
     String? name,

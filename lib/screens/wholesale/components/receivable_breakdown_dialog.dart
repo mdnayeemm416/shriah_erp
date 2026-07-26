@@ -71,7 +71,7 @@ class _ReceivableBreakdownDialogState extends State<ReceivableBreakdownDialog> {
     }).toList();
 
     // Helper for formatting
-    String _fmt(double val) => val.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '');
+    String fmt(double val) => val.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '');
 
     return AlertDialog(
       shape: RoundedRectangleBorder(
@@ -127,7 +127,7 @@ class _ReceivableBreakdownDialogState extends State<ReceivableBreakdownDialog> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'SAR ${_fmt(totalDues)}',
+                          'SAR ${fmt(totalDues)}',
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -252,7 +252,7 @@ class _ReceivableBreakdownDialogState extends State<ReceivableBreakdownDialog> {
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'SAR ${_fmt(due)}',
+                                      'SAR ${fmt(due)}',
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,

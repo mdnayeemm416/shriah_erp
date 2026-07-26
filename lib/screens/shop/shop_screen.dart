@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:hive/hive.dart';
@@ -18,11 +19,6 @@ import '../../models/shop_entry_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../repositories/shop_repository.dart';
 import 'components/shop_models.dart';
-import 'components/shop_header.dart';
-import 'components/shop_date_filter_bar.dart';
-import 'components/per_shop_summary_section.dart';
-import 'components/active_shop_banner.dart';
-import 'components/recent_entries_section.dart';
 import 'components/new_entry_bottom_sheet.dart';
 
 class ShopScreen extends StatefulWidget {
@@ -490,7 +486,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
         withdrawAmt: withdrawAmount,
       );
 
-      final saveCallback = () {
+      void saveCallback() {
         final totalSale = cashSale + bankSale + creditSale - dueReceivable;
         final diff = type == 'sale' ? (totalSale - posSale) : 0.0;
 
@@ -532,7 +528,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
 
         Navigator.pop(context); // Close the sheet
         _clearForm();
-      };
+      }
 
       if (duplicate != null) {
         _showDuplicateWarning(duplicate, saveCallback);
@@ -1298,7 +1294,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
-                        value: shopType,
+                        initialValue: shopType,
                         decoration: InputDecoration(
                           fillColor: isDark ? AppColors.inputDark : Colors.white,
                           filled: true,
@@ -2048,7 +2044,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
-                        value: selectedShopId.isNotEmpty ? selectedShopId : null,
+                        initialValue: selectedShopId.isNotEmpty ? selectedShopId : null,
                         decoration: InputDecoration(
                           fillColor: isDark ? AppColors.inputDark : const Color(0xFFFAFAFA),
                           filled: true,
@@ -2131,249 +2127,961 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
   }
 
   void _showManageCategories() async {
-    final nameController = TextEditingController();
-    final box = await Hive.openBox<String>('expense_categories');
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final boxData = await Hive.openBox<String>('expense_categories_data');
 
-    if (box.isEmpty) {
-      await box.addAll([
-        'Rent',
-        'Electricity',
-        'Water',
-        'Snacks',
-        'Supplies',
-        'Maintenance',
-      ]);
+    if (boxData.isEmpty) {
+      final oldBox = await Hive.openBox<String>('expense_categories');
+      if (oldBox.isNotEmpty) {
+        for (var i = 0; i < oldBox.length; i++) {
+          final name = oldBox.getAt(i) ?? '';
+          if (name.isNotEmpty) {
+            final cat = _ShopCategoryItem(
+              id: 'cat_${DateTime.now().millisecondsSinceEpoch}_$i',
+              name: name,
+              transactionType: 'Cash Out',
+              subCategories: [],
+            );
+            await boxData.add(jsonEncode(cat.toJson()));
+          }
+        }
+      } else {
+        final defaults = [
+          _ShopCategoryItem(
+            id: 'cat_rent',
+            name: 'Rent',
+            transactionType: 'Cash Out',
+            subCategories: ['Office Rent', 'Shop Rent'],
+          ),
+          _ShopCategoryItem(
+            id: 'cat_elec',
+            name: 'Electricity',
+            transactionType: 'Cash Out',
+            subCategories: ['Bill', 'Maintenance'],
+          ),
+          _ShopCategoryItem(
+            id: 'cat_water',
+            name: 'Water',
+            transactionType: 'Cash Out',
+            subCategories: [],
+          ),
+          _ShopCategoryItem(
+            id: 'cat_snacks',
+            name: 'Snacks',
+            transactionType: 'Cash Out',
+            subCategories: [],
+          ),
+          _ShopCategoryItem(
+            id: 'cat_supplies',
+            name: 'Supplies',
+            transactionType: 'Cash Out',
+            subCategories: [],
+          ),
+          _ShopCategoryItem(
+            id: 'cat_maint',
+            name: 'Maintenance',
+            transactionType: 'Cash Out',
+            subCategories: [],
+          ),
+        ];
+        for (final c in defaults) {
+          await boxData.add(jsonEncode(c.toJson()));
+        }
+      }
     }
 
-    final categories = box.values.toList();
+    List<_ShopCategoryItem> loadCategories() {
+      final list = <_ShopCategoryItem>[];
+      for (var i = 0; i < boxData.length; i++) {
+        final str = boxData.getAt(i);
+        if (str != null) {
+          try {
+            final json = jsonDecode(str) as Map<String, dynamic>;
+            list.add(_ShopCategoryItem.fromJson(json));
+          } catch (_) {}
+        }
+      }
+      return list;
+    }
+
+    Future<void> saveCategories(List<_ShopCategoryItem> items) async {
+      await boxData.clear();
+      for (final item in items) {
+        await boxData.add(jsonEncode(item.toJson()));
+      }
+    }
+
+    List<_ShopCategoryItem> categories = loadCategories();
+    String? selectedCategoryId = categories.isNotEmpty ? categories.first.id : null;
+    final searchController = TextEditingController();
 
     if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final query = searchController.text.trim().toLowerCase();
+            final filteredCategories = categories.where((c) {
+              return c.name.toLowerCase().contains(query);
+            }).toList();
+
+            _ShopCategoryItem? selectedCategory;
+            if (selectedCategoryId != null) {
+              selectedCategory = categories.firstWhere(
+                (c) => c.id == selectedCategoryId,
+                orElse: () => categories.isNotEmpty
+                    ? categories.first
+                    : _ShopCategoryItem(id: '', name: '', transactionType: 'Cash Out'),
+              );
+            }
+
             return Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(28),
               ),
-              backgroundColor: isDark ? AppColors.cardDark : Colors.white,
-              clipBehavior: Clip.antiAlias,
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.9,
-                height: 440,
-                child: Column(
-                  children: [
-                    // Header title banner
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 18,
-                      ),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF0F766E), Color(0xFF0D9488)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Row(
+              backgroundColor: isDark ? AppColors.cardDark : const Color(0xFFFAFAFA),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480, maxHeight: 720),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header title & Close Button
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'Expense Categories',
+                          Text(
+                            'Categories',
                             style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(
+                            icon: Icon(
                               LucideIcons.x,
-                              color: Colors.white,
                               size: 18,
+                              color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
                             ),
                             onPressed: () => Navigator.pop(context),
                           ),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 12),
 
-                    // Grid or Wrap of categories
-                    Expanded(
-                      child: categories.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No categories found.',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            )
-                          : SingleChildScrollView(
-                              padding: const EdgeInsets.all(20),
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: List.generate(categories.length, (
-                                  idx,
-                                ) {
-                                  final cat = categories[idx];
-                                  return Container(
-                                    padding: const EdgeInsets.only(
-                                      left: 12,
-                                      right: 4,
-                                      top: 4,
-                                      bottom: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? AppColors.inputDark
-                                          : AppColors.inputLight,
-                                      border: Border.all(
-                                        color: isDark
-                                            ? AppColors.borderDark
-                                            : AppColors.borderLight,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
+                      // Outer Card Container
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.inputDark : Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Inner Header: Icon + "Categories & Sub-categories" + "+ Add category"
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
                                     child: Row(
-                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         const Icon(
                                           LucideIcons.tag,
-                                          size: 12,
-                                          color: AppColors.primary,
+                                          size: 18,
+                                          color: Color(0xFF10B981),
                                         ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          cat,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            'Categories & Sub-categories',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        IconButton(
-                                          icon: const Icon(
-                                            LucideIcons.x,
-                                            size: 12,
-                                            color: Colors.grey,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                          onPressed: () async {
-                                            final key = box.keyAt(idx);
-                                            await box.delete(key);
-                                            setDialogState(() {
-                                              categories.removeAt(idx);
-                                            });
-                                          },
                                         ),
                                       ],
                                     ),
-                                  );
-                                }),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF10B981),
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      _showAddEditCategoryDialog(
+                                        context: context,
+                                        isDark: isDark,
+                                        onSave: (name, transactionType) async {
+                                          final newCat = _ShopCategoryItem(
+                                            id: 'cat_${DateTime.now().millisecondsSinceEpoch}',
+                                            name: name,
+                                            transactionType: transactionType,
+                                            subCategories: [],
+                                          );
+                                          categories.add(newCat);
+                                          await saveCategories(categories);
+                                          setDialogState(() {
+                                            selectedCategoryId = newCat.id;
+                                          });
+                                        },
+                                      );
+                                    },
+                                    icon: const Icon(LucideIcons.plus, size: 14),
+                                    label: const Text(
+                                      'Add category',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                    ),
-                    const Divider(height: 1),
+                              const SizedBox(height: 12),
 
-                    // Add Category tag block
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'ADD CATEGORY TAG',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                              color: Colors.grey,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: nameController,
-                                  style: const TextStyle(
+                              // Search Categories TextField
+                              TextField(
+                                controller: searchController,
+                                onChanged: (_) => setDialogState(() {}),
+                                style: const TextStyle(fontSize: 13),
+                                decoration: InputDecoration(
+                                  hintText: 'Search categories...',
+                                  hintStyle: TextStyle(
+                                    color: isDark ? Colors.grey.shade400 : const Color(0xFF94A3B8),
                                     fontSize: 13,
-                                    fontWeight: FontWeight.bold,
                                   ),
-                                  decoration: InputDecoration(
-                                    hintText: 'Enter expense tag name...',
-                                    hintStyle: const TextStyle(
-                                      fontWeight: FontWeight.normal,
-                                      fontSize: 12,
+                                  prefixIcon: Icon(
+                                    LucideIcons.search,
+                                    size: 16,
+                                    color: isDark ? Colors.grey.shade400 : const Color(0xFF94A3B8),
+                                  ),
+                                  fillColor: isDark ? AppColors.cardDark : const Color(0xFFF8FAFC),
+                                  filled: true,
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    borderSide: BorderSide(
+                                      color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
                                     ),
-                                    fillColor: isDark
-                                        ? AppColors.inputDark
-                                        : AppColors.inputLight,
-                                    filled: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    borderSide: BorderSide(
+                                      color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
                                     ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? AppColors.borderDark
-                                            : AppColors.borderLight,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? AppColors.borderDark
-                                            : AppColors.borderLight,
-                                      ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF10B981),
                                     ),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                              const SizedBox(height: 14),
+
+                              // CATEGORIES label
+                              const Text(
+                                'CATEGORIES',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                  color: Color(0xFF64748B),
+                                  letterSpacing: 0.5,
                                 ),
-                                onPressed: () async {
-                                  final name = nameController.text.trim();
-                                  if (name.isEmpty) return;
-                                  await box.add(name);
-                                  setDialogState(() {
-                                    categories.add(name);
-                                  });
-                                  nameController.clear();
-                                },
-                                child: const Text(
-                                  'Add',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 6),
+
+                              // Categories List Box
+                              Expanded(
+                                flex: 3,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: isDark ? AppColors.cardDark : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  child: filteredCategories.isEmpty
+                                      ? Center(
+                                          child: Text(
+                                            'No categories found.',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: isDark ? Colors.grey.shade400 : const Color(0xFF94A3B8),
+                                            ),
+                                          ),
+                                        )
+                                      : ListView.builder(
+                                          padding: const EdgeInsets.all(6),
+                                          itemCount: filteredCategories.length,
+                                          itemBuilder: (context, idx) {
+                                            final cat = filteredCategories[idx];
+                                            final isSelected = cat.id == selectedCategoryId;
+                                            final isCashOut = cat.transactionType == 'Cash Out';
+
+                                            return Material(
+                                              color: Colors.transparent,
+                                              child: InkWell(
+                                                onTap: () {
+                                                  setDialogState(() {
+                                                    selectedCategoryId = cat.id;
+                                                  });
+                                                },
+                                                borderRadius: BorderRadius.circular(16),
+                                                child: Container(
+                                                  margin: const EdgeInsets.symmetric(vertical: 2),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                  decoration: BoxDecoration(
+                                                    color: isSelected
+                                                        ? (isDark
+                                                            ? const Color(0xFF133E3A)
+                                                            : const Color(0xFFE6F4F1))
+                                                        : Colors.transparent,
+                                                    borderRadius: BorderRadius.circular(16),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      // Transaction icon avatar
+                                                      Container(
+                                                        width: 30,
+                                                        height: 30,
+                                                        decoration: BoxDecoration(
+                                                          color: isCashOut
+                                                              ? const Color(0xFFFEE2E2)
+                                                              : const Color(0xFFD1FAE5),
+                                                          shape: BoxShape.circle,
+                                                        ),
+                                                        child: Icon(
+                                                          isCashOut
+                                                              ? LucideIcons.arrowDownLeft
+                                                              : LucideIcons.arrowUpRight,
+                                                          size: 15,
+                                                          color: isCashOut
+                                                              ? const Color(0xFFEF4444)
+                                                              : const Color(0xFF10B981),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Expanded(
+                                                        child: Text(
+                                                          cat.name,
+                                                          style: TextStyle(
+                                                            fontSize: 14,
+                                                            fontWeight: FontWeight.w600,
+                                                            color: isDark
+                                                                ? Colors.white
+                                                                : const Color(0xFF0F172A),
+                                                          ),
+                                                        ),
+                                                      ),
+
+                                                      // Edit Button
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          LucideIcons.pencil,
+                                                          size: 16,
+                                                          color: Color(0xFF64748B),
+                                                        ),
+                                                        constraints: const BoxConstraints(),
+                                                        padding: const EdgeInsets.all(4),
+                                                        onPressed: () {
+                                                          _showAddEditCategoryDialog(
+                                                            context: context,
+                                                            isDark: isDark,
+                                                            initialName: cat.name,
+                                                            initialTransactionType: cat.transactionType,
+                                                            onSave: (newName, newType) async {
+                                                              final index = categories.indexWhere((c) => c.id == cat.id);
+                                                              if (index != -1) {
+                                                                categories[index] = cat.copyWith(
+                                                                  name: newName,
+                                                                  transactionType: newType,
+                                                                );
+                                                                await saveCategories(categories);
+                                                                setDialogState(() {});
+                                                              }
+                                                            },
+                                                          );
+                                                        },
+                                                      ),
+                                                      const SizedBox(width: 4),
+
+                                                      // Delete Button
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          LucideIcons.trash2,
+                                                          size: 16,
+                                                          color: Color(0xFF64748B),
+                                                        ),
+                                                        constraints: const BoxConstraints(),
+                                                        padding: const EdgeInsets.all(4),
+                                                        onPressed: () async {
+                                                          categories.removeWhere((c) => c.id == cat.id);
+                                                          await saveCategories(categories);
+                                                          setDialogState(() {
+                                                            if (selectedCategoryId == cat.id) {
+                                                              selectedCategoryId = categories.isNotEmpty
+                                                                  ? categories.first.id
+                                                                  : null;
+                                                            }
+                                                          });
+                                                        },
+                                                      ),
+                                                      const SizedBox(width: 4),
+
+                                                      // Chevron Right Icon
+                                                      Icon(
+                                                        LucideIcons.chevronRight,
+                                                        size: 16,
+                                                        color: isDark
+                                                            ? Colors.grey.shade400
+                                                            : const Color(0xFF94A3B8),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+
+                              // SUB-CATEGORIES section header row
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'SUB-CATEGORIES OF ${selectedCategory != null ? selectedCategory.name.toUpperCase() : ""}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 11,
+                                        color: Color(0xFF64748B),
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      side: BorderSide(
+                                        color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                    ),
+                                    onPressed: selectedCategory == null
+                                        ? null
+                                        : () {
+                                            _showAddEditSubCategoryDialog(
+                                              context: context,
+                                              isDark: isDark,
+                                              onSave: (subName) async {
+                                                final updatedSubs = List<String>.from(selectedCategory!.subCategories)..add(subName);
+                                                final index = categories.indexWhere((c) => c.id == selectedCategory!.id);
+                                                if (index != -1) {
+                                                  categories[index] = selectedCategory.copyWith(subCategories: updatedSubs);
+                                                  await saveCategories(categories);
+                                                  setDialogState(() {});
+                                                }
+                                              },
+                                            );
+                                          },
+                                    icon: Icon(
+                                      LucideIcons.plus,
+                                      size: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                    label: Text(
+                                      'Add sub',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+
+                              // Sub-categories list container
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: isDark ? AppColors.cardDark : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  child: (selectedCategory == null || selectedCategory.subCategories.isEmpty)
+                                      ? Center(
+                                          child: Text(
+                                            'No sub-categories yet.',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: isDark ? Colors.grey.shade400 : const Color(0xFF94A3B8),
+                                            ),
+                                          ),
+                                        )
+                                      : ListView.builder(
+                                          padding: const EdgeInsets.all(6),
+                                          itemCount: selectedCategory.subCategories.length,
+                                          itemBuilder: (context, idx) {
+                                            final sub = selectedCategory!.subCategories[idx];
+                                            return Container(
+                                              margin: const EdgeInsets.symmetric(vertical: 2),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: isDark ? AppColors.inputDark : Colors.white,
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    sub,
+                                                    style: TextStyle(
+                                                      fontSize: 13,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                                    ),
+                                                  ),
+                                                  Row(
+                                                    children: [
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          LucideIcons.pencil,
+                                                          size: 14,
+                                                          color: Color(0xFF64748B),
+                                                        ),
+                                                        constraints: const BoxConstraints(),
+                                                        padding: const EdgeInsets.all(4),
+                                                        onPressed: () {
+                                                          _showAddEditSubCategoryDialog(
+                                                            context: context,
+                                                            isDark: isDark,
+                                                            initialName: sub,
+                                                            onSave: (newSubName) async {
+                                                              final updatedSubs = List<String>.from(selectedCategory!.subCategories);
+                                                              updatedSubs[idx] = newSubName;
+                                                              final index = categories.indexWhere((c) => c.id == selectedCategory!.id);
+                                                              if (index != -1) {
+                                                                categories[index] = selectedCategory.copyWith(subCategories: updatedSubs);
+                                                                await saveCategories(categories);
+                                                                setDialogState(() {});
+                                                              }
+                                                            },
+                                                          );
+                                                        },
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          LucideIcons.trash2,
+                                                          size: 14,
+                                                          color: Color(0xFF64748B),
+                                                        ),
+                                                        constraints: const BoxConstraints(),
+                                                        padding: const EdgeInsets.all(4),
+                                                        onPressed: () async {
+                                                          final updatedSubs = List<String>.from(selectedCategory!.subCategories)..removeAt(idx);
+                                                          final index = categories.indexWhere((c) => c.id == selectedCategory!.id);
+                                                          if (index != -1) {
+                                                            categories[index] = selectedCategory.copyWith(subCategories: updatedSubs);
+                                                            await saveCategories(categories);
+                                                            setDialogState(() {});
+                                                          }
+                                                        },
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
                                 ),
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showAddEditCategoryDialog({
+    required BuildContext context,
+    required bool isDark,
+    String? initialName,
+    String? initialTransactionType,
+    required Function(String name, String transactionType) onSave,
+  }) {
+    final nameController = TextEditingController(text: initialName ?? '');
+    String selectedType = initialTransactionType ?? 'Cash Out';
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setSubState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              backgroundColor: isDark ? AppColors.cardDark : const Color(0xFFFAFAFA),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Dialog Title & Close Button
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            initialName == null ? 'New category' : 'Edit category',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              LucideIcons.x,
+                              size: 18,
+                              color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                            ),
+                            onPressed: () => Navigator.pop(dialogCtx),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Field Label: Name
+                      Text(
+                        'Name',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: isDark ? Colors.white70 : const Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // TextField: Name
+                      TextField(
+                        controller: nameController,
+                        style: const TextStyle(fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Rent',
+                          hintStyle: TextStyle(
+                            color: isDark ? Colors.grey.shade500 : const Color(0xFF94A3B8),
+                            fontSize: 14,
+                          ),
+                          fillColor: isDark ? AppColors.cardDark : Colors.white,
+                          filled: true,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF10B981),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Field Label: Transaction type
+                      Text(
+                        'Transaction type',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: isDark ? Colors.white70 : const Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Dropdown: Transaction type
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedType,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                        decoration: InputDecoration(
+                          fillColor: isDark ? AppColors.cardDark : Colors.white,
+                          filled: true,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF10B981),
+                            ),
+                          ),
+                        ),
+                        icon: const Icon(LucideIcons.chevronDown, size: 16),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'Cash Out',
+                            child: Text('Cash Out'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Cash In',
+                            child: Text('Cash In'),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setSubState(() {
+                              selectedType = val;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Save Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF10B981),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                          onPressed: () {
+                            final name = nameController.text.trim();
+                            if (name.isEmpty) return;
+                            onSave(name, selectedType);
+                            Navigator.pop(dialogCtx);
+                          },
+                          child: const Text(
+                            'Save',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showAddEditSubCategoryDialog({
+    required BuildContext context,
+    required bool isDark,
+    String? initialName,
+    required Function(String subName) onSave,
+  }) {
+    final nameController = TextEditingController(text: initialName ?? '');
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          backgroundColor: isDark ? AppColors.cardDark : const Color(0xFFFAFAFA),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Dialog Title & Close Button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        initialName == null ? 'New sub-category' : 'Edit sub-category',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          LucideIcons.x,
+                          size: 18,
+                          color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                        ),
+                        onPressed: () => Navigator.pop(dialogCtx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Field Label: Name
+                  Text(
+                    'Name',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: isDark ? Colors.white70 : const Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  // TextField: Name
+                  TextField(
+                    controller: nameController,
+                    style: const TextStyle(fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Electricity',
+                      hintStyle: TextStyle(
+                        color: isDark ? Colors.grey.shade500 : const Color(0xFF94A3B8),
+                        fontSize: 14,
+                      ),
+                      fillColor: isDark ? AppColors.cardDark : Colors.white,
+                      filled: true,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide(
+                          color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide(
+                          color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF10B981),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Save Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                      onPressed: () {
+                        final name = nameController.text.trim();
+                        if (name.isEmpty) return;
+                        onSave(name);
+                        Navigator.pop(dialogCtx);
+                      },
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
@@ -2732,14 +3440,16 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                         ],
                                         rows: rows.map<DataRow>((r) {
                                           Color rowColor = Colors.transparent;
-                                          if (r.status == 'Error')
+                                          if (r.status == 'Error') {
                                             rowColor = Colors.red.withValues(
                                               alpha: 0.05,
                                             );
-                                          if (r.status == 'Dup')
+                                          }
+                                          if (r.status == 'Dup') {
                                             rowColor = Colors.amber.withValues(
                                               alpha: 0.05,
                                             );
+                                          }
 
                                           return DataRow(
                                             color: WidgetStateProperty.all(
@@ -3384,7 +4094,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                 ),
                               ],
                             );
-                          }).toList(),
+                          }),
                           // Totals Row
                           DataRow(
                             color: WidgetStateProperty.all(
@@ -3902,23 +4612,29 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
 
         // Date bounds filter
         final eDateStr = _formatDateString(e.txnDate);
-        if (eDateStr.compareTo(fromStr) < 0 || eDateStr.compareTo(toStr) > 0)
+        if (eDateStr.compareTo(fromStr) < 0 || eDateStr.compareTo(toStr) > 0) {
           return false;
+        }
 
         // Entry types filter pills
         if (_activeFilters.isNotEmpty) {
           bool match = false;
           for (final f in _activeFilters) {
-            if (f == 'pos_sale' && e.entryType == 'sale' && e.posSale > 0)
+            if (f == 'pos_sale' && e.entryType == 'sale' && e.posSale > 0) {
               match = true;
-            if (f == 'cash_sale' && e.entryType == 'sale' && e.cashSale > 0)
+            }
+            if (f == 'cash_sale' && e.entryType == 'sale' && e.cashSale > 0) {
               match = true;
-            if (f == 'bank_sale' && e.entryType == 'sale' && e.bankSale > 0)
+            }
+            if (f == 'bank_sale' && e.entryType == 'sale' && e.bankSale > 0) {
               match = true;
-            if (f == 'credit_sale' && e.entryType == 'sale' && e.creditSale > 0)
+            }
+            if (f == 'credit_sale' && e.entryType == 'sale' && e.creditSale > 0) {
               match = true;
-            if (f == 'difference' && e.entryType == 'sale' && e.difference != 0)
+            }
+            if (f == 'difference' && e.entryType == 'sale' && e.difference != 0) {
               match = true;
+            }
             if (f == 'purchase' && e.entryType == 'purchase') match = true;
             if (f == 'expense' && e.entryType == 'expense') match = true;
             if (f == 'withdraw' && e.entryType == 'withdraw') match = true;
@@ -3954,22 +4670,30 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       } else {
         for (final e in filteredEntries) {
           for (final f in _activeFilters) {
-            if (f == 'pos_sale' && e.entryType == 'sale')
+            if (f == 'pos_sale' && e.entryType == 'sale') {
               netTotalSum += e.posSale;
-            if (f == 'cash_sale' && e.entryType == 'sale')
+            }
+            if (f == 'cash_sale' && e.entryType == 'sale') {
               netTotalSum += e.cashSale;
-            if (f == 'bank_sale' && e.entryType == 'sale')
+            }
+            if (f == 'bank_sale' && e.entryType == 'sale') {
               netTotalSum += e.bankSale;
-            if (f == 'credit_sale' && e.entryType == 'sale')
+            }
+            if (f == 'credit_sale' && e.entryType == 'sale') {
               netTotalSum += e.creditSale;
-            if (f == 'difference' && e.entryType == 'sale')
+            }
+            if (f == 'difference' && e.entryType == 'sale') {
               netTotalSum += e.difference;
-            if (f == 'purchase' && e.entryType == 'purchase')
+            }
+            if (f == 'purchase' && e.entryType == 'purchase') {
               netTotalSum += e.purchaseAmount;
-            if (f == 'expense' && e.entryType == 'expense')
+            }
+            if (f == 'expense' && e.entryType == 'expense') {
               netTotalSum += e.expenseAmount;
-            if (f == 'withdraw' && e.entryType == 'withdraw')
+            }
+            if (f == 'withdraw' && e.entryType == 'withdraw') {
               netTotalSum += e.withdrawAmount;
+            }
           }
         }
       }
@@ -4215,7 +4939,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               height: 40,
                               child: Row(
                                 children: [
-                                  Icon(LucideIcons.plus, size: 18, color: AppColors.primary),
+                                  const Icon(LucideIcons.plus, size: 18, color: AppColors.primary),
                                   const SizedBox(width: 12),
                                   Text(
                                     'New Entry',
@@ -5281,3 +6005,46 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
     );
   }
 }
+
+class _ShopCategoryItem {
+  final String id;
+  final String name;
+  final String transactionType;
+  final List<String> subCategories;
+
+  _ShopCategoryItem({
+    required this.id,
+    required this.name,
+    this.transactionType = 'Cash Out',
+    List<String>? subCategories,
+  }) : subCategories = subCategories ?? [];
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'transactionType': transactionType,
+        'subCategories': subCategories,
+      };
+
+  factory _ShopCategoryItem.fromJson(Map<String, dynamic> json) => _ShopCategoryItem(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        transactionType: json['transactionType'] as String? ?? 'Cash Out',
+        subCategories: List<String>.from(json['subCategories'] as List? ?? []),
+      );
+
+  _ShopCategoryItem copyWith({
+    String? id,
+    String? name,
+    String? transactionType,
+    List<String>? subCategories,
+  }) {
+    return _ShopCategoryItem(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      transactionType: transactionType ?? this.transactionType,
+      subCategories: subCategories ?? List<String>.from(this.subCategories),
+    );
+  }
+}
+

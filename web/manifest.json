@@ -1,11 +1,11 @@
 {
-    "name": "saudi",
-    "short_name": "saudi",
+    "name": "shriah_erp",
+    "short_name": "shriah_erp",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Shriah ERP Application.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

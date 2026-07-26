@@ -402,7 +402,7 @@ void showAddEntryDialog(BuildContext context, String employeeId) {
                 const Text('Transaction Category', style: TextStyle(fontWeight: FontWeight.w500)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: entryType,
+                  initialValue: entryType,
                   items: const [
                     DropdownMenuItem(value: 'give', child: Text('Wallet Give (Advance)')),
                     DropdownMenuItem(value: 'receive', child: Text('Wallet Receive (Refund)')),
@@ -415,7 +415,7 @@ void showAddEntryDialog(BuildContext context, String employeeId) {
                 const Text('Payment Channel', style: TextStyle(fontWeight: FontWeight.w500)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: kind,
+                  initialValue: kind,
                   items: const [
                     DropdownMenuItem(value: 'cash', child: Text('Physical Cash')),
                     DropdownMenuItem(value: 'bank', child: Text('Bank Wire Transfer')),

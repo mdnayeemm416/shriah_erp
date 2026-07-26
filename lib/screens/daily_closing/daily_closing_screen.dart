@@ -67,7 +67,7 @@ class _DailyClosingScreenState extends State<DailyClosingScreen> {
   }
 
   Future<void> _shareToWhatsApp(DailyClosingState state) async {
-    final currency = 'SAR';
+    const currency = 'SAR';
     final formatter = NumberFormat.currency(symbol: currency);
 
     final title = 'Daily Closing Report - ${DateFormat('yyyy-MM-dd').format(state.date)}';

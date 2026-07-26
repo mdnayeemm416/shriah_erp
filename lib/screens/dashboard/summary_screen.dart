@@ -18,6 +18,8 @@ import '../../repositories/employee_repository.dart';
 import '../../repositories/product_repository.dart';
 import '../../repositories/company_transaction_repository.dart';
 import '../../repositories/cash_snapshot_repository.dart';
+import '../../repositories/wholesale_repository.dart';
+import '../../models/wholesale_models.dart';
 
 class SummaryScreen extends StatefulWidget {
   const SummaryScreen({super.key});
@@ -40,6 +42,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
   List<ProductModel> _products = [];
   List<CashInHandSnapshotModel> _snapshots = [];
   List<CashHolderModel> _holders = [];
+  List<WholesaleCustomerModel> _wholesaleCustomers = [];
+  List<WholesaleSaleModel> _wholesaleSales = [];
+  List<WholesalePaymentModel> _wholesalePayments = [];
 
   // Text inputs controllers for cash holders
   List<TextEditingController> _nameControllers = [];
@@ -76,6 +81,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
       final productRepo = context.read<ProductRepository>();
       final companyRepo = context.read<CompanyTransactionRepository>();
       final snapshotRepo = context.read<CashSnapshotRepository>();
+      final wholesaleRepo = context.read<WholesaleRepository>();
 
       final shops = await shopRepo.getShops();
       final shopEntries = await shopRepo.getEntries();
@@ -84,6 +90,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
       final products = await productRepo.getProducts();
       final snapshots = await snapshotRepo.getSnapshots();
       final holders = await snapshotRepo.getCurrentHolders();
+      final wholesaleCustomers = await wholesaleRepo.getCustomers();
+      final wholesaleSales = await wholesaleRepo.getSales();
+      final wholesalePayments = await wholesaleRepo.getPayments();
 
       _disposeControllers();
 
@@ -100,6 +109,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
         _products = products;
         _snapshots = snapshots;
         _holders = holders;
+        _wholesaleCustomers = wholesaleCustomers;
+        _wholesaleSales = wholesaleSales;
+        _wholesalePayments = wholesalePayments;
         _isLoading = false;
       });
     } catch (e) {
@@ -182,7 +194,13 @@ class _SummaryScreenState extends State<SummaryScreen> {
     return sum;
   }
 
-  double get _wholesaleReceivables => 0.0; // Mocked as 0.0 in Flutter database
+  double get _wholesaleReceivables {
+    final openingDues = _wholesaleCustomers.fold(0.0, (sum, c) => sum + c.openingDue);
+    final salesDues = _wholesaleSales.where((s) => s.status != 'cancelled').fold(0.0, (sum, s) => sum + s.dueAmount);
+    final paymentsIn = _wholesalePayments.where((p) => p.kind == 'payment_in').fold(0.0, (sum, p) => sum + p.amount);
+    final total = openingDues + salesDues - paymentsIn;
+    return total > 0 ? total : 0.0;
+  }
 
   double get _wholesaleCurrentValue => _currentStockValue + _wholesaleReceivables;
 
@@ -430,7 +448,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
               const SizedBox(height: 20),
               _buildBreakdownRow('Current Stock', _currentStockValue),
               const Divider(height: 24),
-              _buildBreakdownRow('Receivables (Mock)', _wholesaleReceivables),
+              _buildBreakdownRow('Receivables', _wholesaleReceivables),
               const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(16),

@@ -211,7 +211,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         // Shop Filter dropdown
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _selectedShopId ?? 'all',
+                            initialValue: _selectedShopId ?? 'all',
                             decoration: const InputDecoration(
                               labelText: 'Shop Location',
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -232,7 +232,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         // Entry Type dropdown
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _selectedEntryType,
+                            initialValue: _selectedEntryType,
                             decoration: const InputDecoration(
                               labelText: 'Entry Type',
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),

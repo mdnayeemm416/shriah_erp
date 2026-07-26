@@ -389,7 +389,7 @@ class _AddCategoryBottomSheetState extends State<AddCategoryBottomSheet> {
                     ),
                     Switch(
                       value: isActive,
-                      activeColor: Colors.white,
+                      activeThumbColor: Colors.white,
                       activeTrackColor: AppColors.primaryGlow,
                       inactiveTrackColor: isDark ? Colors.grey[800] : Colors.grey[300],
                       onChanged: (bool val) {

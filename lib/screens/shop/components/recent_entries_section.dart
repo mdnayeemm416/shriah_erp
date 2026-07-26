@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../../../models/shop_entry_model.dart';
-import '../../../models/shop_model.dart';
 
 class RecentEntriesSection extends StatelessWidget {
   final String activeShopName;

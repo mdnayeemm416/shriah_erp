@@ -31,7 +31,7 @@ class _WholesaleTransactionDialogState extends State<WholesaleTransactionDialog>
   String? _customerId;
   String _customerName = 'Walk-in Customer';
   String _customerMobile = '';
-  String _supplierName = '';
+  final String _supplierName = '';
 
   List<WholesaleSaleItemModel> _items = [];
   double _discount = 0.0;
@@ -624,19 +624,22 @@ class _WholesaleTransactionDialogState extends State<WholesaleTransactionDialog>
 
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8.0),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isInCart ? (isDark ? const Color(0xFF132A29) : const Color(0xFFF0FDF4)) : cardBg,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: isInCart ? primaryColor : borderColor,
-                                width: isInCart ? 1.5 : 1.0,
+                          child: InkWell(
+                            onTap: () => _addItem(product),
+                            borderRadius: BorderRadius.circular(20),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isInCart ? (isDark ? const Color(0xFF132A29) : const Color(0xFFF0FDF4)) : cardBg,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isInCart ? primaryColor : borderColor,
+                                  width: isInCart ? 1.5 : 1.0,
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              children: [
+                              child: Row(
+                                children: [
                                 // Box Icon Avatar
                                 Container(
                                   width: 38,
@@ -759,7 +762,8 @@ class _WholesaleTransactionDialogState extends State<WholesaleTransactionDialog>
                               ],
                             ),
                           ),
-                        );
+                        ),
+                      );
                       }),
                       const SizedBox(height: 70),
                     ],

@@ -375,7 +375,7 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: mode,
+                  initialValue: mode,
                   decoration: InputDecoration(
                     fillColor: cardBgColor,
                     filled: true,

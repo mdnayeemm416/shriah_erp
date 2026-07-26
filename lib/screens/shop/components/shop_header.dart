@@ -114,7 +114,7 @@ class ShopHeader extends StatelessWidget implements PreferredSizeWidget {
                   height: 40,
                   child: Row(
                     children: [
-                      Icon(LucideIcons.plus, size: 18, color: AppColors.primary),
+                      const Icon(LucideIcons.plus, size: 18, color: AppColors.primary),
                       const SizedBox(width: 12),
                       Text(
                         'New Entry',

@@ -31,7 +31,7 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
 
   // Step 1 State
   WholesaleCustomerModel? _selectedCustomer;
-  String _customerSearch = '';
+  final String _customerSearch = '';
 
   // Step 2 State
   WholesaleSaleModel? _selectedSale;

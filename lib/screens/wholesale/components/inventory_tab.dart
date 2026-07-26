@@ -231,9 +231,13 @@ class _InventoryTabState extends State<InventoryTab> {
           final st = p.stock;
           final min = p.minStock;
           if (_inventoryFilter == 'in' &&
-              !(st > 0 && !(min > 0 && st <= min))) return false;
+              !(st > 0 && !(min > 0 && st <= min))) {
+            return false;
+          }
           if (_inventoryFilter == 'low' &&
-              !(min > 0 && st > 0 && st <= min)) return false;
+              !(min > 0 && st > 0 && st <= min)) {
+            return false;
+          }
           if (_inventoryFilter == 'zero' && st != 0) return false;
           if (_inventoryFilter == 'negative' && st >= 0) return false;
 

@@ -22,7 +22,7 @@ class DashboardTab extends StatefulWidget {
 }
 
 class _DashboardTabState extends State<DashboardTab> {
-  String _profitPeriod = 'Monthly';
+  final String _profitPeriod = 'Monthly';
   String _recentEntryFilter = 'All';
 
   String _fmt(double val) {

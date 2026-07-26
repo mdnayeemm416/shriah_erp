@@ -269,7 +269,7 @@ class _ProfitSummaryScreenState extends State<ProfitSummaryScreen> {
                           const SizedBox(width: 16),
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: _selectedShopId,
+                              initialValue: _selectedShopId,
                               items: _shops
                                   .map(
                                     (s) => DropdownMenuItem(
