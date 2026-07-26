@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../core/api/api_client.dart';
+import '../core/api/endpoints/api_endpoints.dart';
 import '../models/user_model.dart';
 
 class AuthRepository {
@@ -23,33 +24,49 @@ class AuthRepository {
     required String password,
     bool rememberMe = true,
   }) async {
-    final res = await _apiClient.login(
-      identifier: identifier,
-      password: password,
-    );
+    try {
+      final response = await _apiClient.post(
+        ApiEndpoints.login,
+        data: {
+          'identifier': identifier,
+          'password': password,
+        },
+      );
 
-    if (res['success'] == true && res['data'] != null && res['data']['user'] != null) {
-      final userMap = Map<String, dynamic>.from(res['data']['user'] as Map);
-      final user = UserModel.fromJson(userMap);
-      _currentUser = user;
+      final res = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
 
-      // Save user profile and credentials in Hive box
-      final box = await Hive.openBox(_authBoxName);
-      await box.put('user_profile', user.toJson());
-      await box.put('remember_me', rememberMe);
+      if (response.statusCode == 200 && res['success'] == true && res['data'] != null && res['data']['user'] != null) {
+        final token = res['data']['token'] as String?;
+        if (token != null) {
+          await _apiClient.setToken(token);
+        }
 
-      if (rememberMe) {
-        await box.put('saved_identifier', identifier);
-        await box.put('saved_password', password);
+        final userMap = Map<String, dynamic>.from(res['data']['user'] as Map);
+        final user = UserModel.fromJson(userMap);
+        _currentUser = user;
+
+        final box = await Hive.openBox(_authBoxName);
+        await box.put('user_profile', user.toJson());
+        await box.put('remember_me', rememberMe);
+
+        if (rememberMe) {
+          await box.put('saved_identifier', identifier);
+          await box.put('saved_password', password);
+        } else {
+          await box.delete('saved_identifier');
+          await box.delete('saved_password');
+        }
+
+        return user;
       } else {
-        await box.delete('saved_identifier');
-        await box.delete('saved_password');
+        final errorMsg = res['message'] as String? ?? 'Invalid credentials or server error (${response.statusCode})';
+        throw Exception(errorMsg);
       }
-
-      return user;
-    } else {
-      final errorMsg = res['message'] as String? ?? 'Invalid credentials or server error';
-      throw Exception(errorMsg);
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception(e.toString());
     }
   }
 

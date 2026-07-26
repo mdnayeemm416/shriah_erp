@@ -1,5 +1,6 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import '../core/api/api_client.dart';
+import '../core/api/endpoints/api_endpoints.dart';
 import '../models/price_compare_models.dart';
 
 class PriceCompareRepository {
@@ -17,7 +18,7 @@ class PriceCompareRepository {
   Future<List<Map<String, dynamic>>> getRemotePriceCompares() async {
     final list = <Map<String, dynamic>>[];
     try {
-      final remoteList = await _apiClient.getPriceCompares();
+      final remoteList = await _apiClient.getList(ApiEndpoints.wholesalePriceCompares);
       if (remoteList != null) {
         for (final item in remoteList) {
           if (item is Map<String, dynamic>) {

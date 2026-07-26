@@ -1,6 +1,7 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../core/api/api_client.dart';
+import '../core/api/endpoints/api_endpoints.dart';
 import '../models/employee_model.dart';
 import '../models/employee_entry_model.dart';
 
@@ -71,7 +72,7 @@ class EmployeeRepository {
     final box = Hive.box<EmployeeModel>(_employeesBoxName);
     
     try {
-      final remoteList = await _apiClient.getEmployees();
+      final remoteList = await _apiClient.getList(ApiEndpoints.employees);
       if (remoteList != null && remoteList.isNotEmpty) {
         for (final item in remoteList) {
           if (item is Map<String, dynamic>) {
@@ -96,13 +97,25 @@ class EmployeeRepository {
     await box.put(employee.id, employee);
 
     try {
-      await _apiClient.createEmployee(employee.toJson());
+      await _apiClient.postMap(ApiEndpoints.employees, employee.toJson());
     } catch (_) {}
   }
 
   // --- CRUD for Entries ---
   Future<List<EmployeeEntryModel>> getEntries({String? employeeId}) async {
     final box = Hive.box<EmployeeEntryModel>(_entriesBoxName);
+    try {
+      final remoteList = await _apiClient.getList(ApiEndpoints.employeeEntries);
+      if (remoteList != null && remoteList.isNotEmpty) {
+        for (final item in remoteList) {
+          if (item is Map<String, dynamic>) {
+            final entry = EmployeeEntryModel.fromJson(item);
+            await box.put(entry.id, entry);
+          }
+        }
+      }
+    } catch (_) {}
+
     var query = box.values.where((e) => !e.isDeleted);
     
     if (employeeId != null) {
@@ -115,6 +128,9 @@ class EmployeeRepository {
   Future<void> saveEntry(EmployeeEntryModel entry) async {
     final box = Hive.box<EmployeeEntryModel>(_entriesBoxName);
     await box.put(entry.id, entry);
+    try {
+      await _apiClient.postMap(ApiEndpoints.employeeEntries, entry.toJson());
+    } catch (_) {}
   }
 
   Future<void> deleteEntry(String id) async {

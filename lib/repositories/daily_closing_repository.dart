@@ -1,8 +1,11 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import '../core/api/api_client.dart';
+import '../core/api/endpoints/api_endpoints.dart';
 import '../models/daily_closing_model.dart';
 
 class DailyClosingRepository {
   static const String _boxName = 'daily_closings';
+  final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
     Hive.registerAdapter(DailyClosingModelAdapter());
@@ -11,6 +14,17 @@ class DailyClosingRepository {
 
   Future<List<DailyClosingModel>> getClosings() async {
     final box = Hive.box<DailyClosingModel>(_boxName);
+    try {
+      final remoteList = await _apiClient.getList(ApiEndpoints.dailyClosings);
+      if (remoteList != null && remoteList.isNotEmpty) {
+        for (final item in remoteList) {
+          if (item is Map<String, dynamic>) {
+            final c = DailyClosingModel.fromJson(item);
+            await box.put(c.id, c);
+          }
+        }
+      }
+    } catch (_) {}
     final list = box.values.where((c) => !c.isDeleted).toList();
     list.sort((a, b) => b.closingDate.compareTo(a.closingDate));
     return list;
@@ -41,6 +55,9 @@ class DailyClosingRepository {
   Future<void> saveClosing(DailyClosingModel closing) async {
     final box = Hive.box<DailyClosingModel>(_boxName);
     await box.put(closing.id, closing);
+    try {
+      await _apiClient.postMap(ApiEndpoints.dailyClosings, closing.toJson());
+    } catch (_) {}
   }
 
   Future<void> deleteClosing(String id) async {

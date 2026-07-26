@@ -6,11 +6,17 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../blocs/wholesale/wholesale_cubit.dart';
+import '../../../models/wholesale_models.dart';
 import '../../common_widgets/dashed_rounded_rect_painter.dart';
 import '../../common_widgets/dialog_helper_widgets.dart';
 
 class AddCategoryBottomSheet extends StatefulWidget {
-  const AddCategoryBottomSheet({super.key});
+  final WholesaleCategoryModel? categoryToEdit;
+
+  const AddCategoryBottomSheet({
+    super.key,
+    this.categoryToEdit,
+  });
 
   @override
   State<AddCategoryBottomSheet> createState() => _AddCategoryBottomSheetState();
@@ -21,10 +27,23 @@ class _AddCategoryBottomSheetState extends State<AddCategoryBottomSheet> {
   String smartSectionValue = '— None —';
   bool isActive = true;
 
-  final nameController = TextEditingController();
-  final arController = TextEditingController();
-  final bnController = TextEditingController();
-  final sortController = TextEditingController(text: '0');
+  late final TextEditingController nameController;
+  late final TextEditingController arController;
+  late final TextEditingController bnController;
+  late final TextEditingController sortController;
+
+  @override
+  void initState() {
+    super.initState();
+    final cat = widget.categoryToEdit;
+    nameController = TextEditingController(text: cat?.name ?? '');
+    arController = TextEditingController(text: cat?.nameAr ?? '');
+    bnController = TextEditingController(text: cat?.nameBn ?? '');
+    sortController = TextEditingController(text: cat?.sortOrder.toString() ?? '0');
+    isActive = cat?.isActive ?? true;
+    selectedImagePath = cat?.imageUrl;
+    smartSectionValue = cat?.smartSection ?? '— None —';
+  }
 
   @override
   void dispose() {
@@ -420,15 +439,28 @@ class _AddCategoryBottomSheetState extends State<AddCategoryBottomSheet> {
                   final bn = bnController.text.trim();
                   final sort = int.tryParse(sortController.text) ?? 0;
                   if (name.isNotEmpty) {
-                    context.read<WholesaleCubit>().createCategory(
-                      name: name,
-                      nameAr: ar.isEmpty ? null : ar,
-                      nameBn: bn.isEmpty ? null : bn,
-                      sortOrder: sort,
-                      isActive: isActive,
-                      imageUrl: selectedImagePath,
-                      smartSection: smartSectionValue == '— None —' ? null : smartSectionValue,
-                    );
+                    if (widget.categoryToEdit != null) {
+                      final updated = widget.categoryToEdit!.copyWith(
+                        name: name,
+                        nameAr: ar.isEmpty ? null : ar,
+                        nameBn: bn.isEmpty ? null : bn,
+                        sortOrder: sort,
+                        isActive: isActive,
+                        imageUrl: selectedImagePath,
+                        smartSection: smartSectionValue == '— None —' ? null : smartSectionValue,
+                      );
+                      context.read<WholesaleCubit>().updateCategory(updated);
+                    } else {
+                      context.read<WholesaleCubit>().createCategory(
+                        name: name,
+                        nameAr: ar.isEmpty ? null : ar,
+                        nameBn: bn.isEmpty ? null : bn,
+                        sortOrder: sort,
+                        isActive: isActive,
+                        imageUrl: selectedImagePath,
+                        smartSection: smartSectionValue == '— None —' ? null : smartSectionValue,
+                      );
+                    }
                     Navigator.pop(context);
                   }
                 },

@@ -1,6 +1,7 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../core/api/api_client.dart';
+import '../core/api/endpoints/api_endpoints.dart';
 import '../models/product_model.dart';
 
 class ProductRepository {
@@ -64,7 +65,7 @@ class ProductRepository {
         id: uuid.v4(),
         name: 'Indomie Chicken Noodles 5-Pack',
         nameAr: 'إندومي نودلز الدجاج ٥ حبات',
-        nameBn: 'ইনডমি নুডলস চিকেন ৫ প্যাকেট',
+        nameBn: 'ইনডمي নুডলস চিকেন ৫ প্যাকেট',
         barcode: '6281101230198',
         itemCode: 'IND-5P',
         price: 7.50,
@@ -84,7 +85,7 @@ class ProductRepository {
     final box = Hive.box<ProductModel>(_boxName);
     
     try {
-      final remoteData = await _apiClient.getProducts();
+      final remoteData = await _apiClient.getList(ApiEndpoints.products);
       if (remoteData != null && remoteData.isNotEmpty) {
         for (final item in remoteData) {
           if (item is Map<String, dynamic>) {
@@ -116,10 +117,15 @@ class ProductRepository {
 
   Future<void> saveProduct(ProductModel product) async {
     final box = Hive.box<ProductModel>(_boxName);
+    final isExisting = box.containsKey(product.id);
     await box.put(product.id, product);
 
     try {
-      await _apiClient.createProduct(product.toJson());
+      if (isExisting) {
+        await _apiClient.putMap(ApiEndpoints.productById(product.id), product.toJson());
+      } else {
+        await _apiClient.postMap(ApiEndpoints.products, product.toJson());
+      }
     } catch (_) {
       // Offline mode, saved locally
     }
@@ -132,7 +138,7 @@ class ProductRepository {
       final updated = p.copyWith(stock: newStock);
       await box.put(id, updated);
       try {
-        await _apiClient.createProduct(updated.toJson());
+        await _apiClient.putMap(ApiEndpoints.productById(id), updated.toJson());
       } catch (_) {}
     }
   }
@@ -143,5 +149,8 @@ class ProductRepository {
     if (p != null) {
       await box.put(id, p.copyWith(isDeleted: true));
     }
+    try {
+      await _apiClient.deleteBool(ApiEndpoints.productById(id));
+    } catch (_) {}
   }
 }

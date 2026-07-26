@@ -4,18 +4,19 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../blocs/wholesale/wholesale_state.dart';
+import '../../../models/wholesale_models.dart';
 import 'add_category_bottom_sheet.dart';
 
 class CategoriesTab extends StatelessWidget {
   const CategoriesTab({super.key});
 
-  void _showAddCategoryDialog(BuildContext context) {
+  void _showAddCategoryDialog(BuildContext context, [WholesaleCategoryModel? categoryToEdit]) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const AddCategoryBottomSheet(),
+      builder: (context) => AddCategoryBottomSheet(categoryToEdit: categoryToEdit),
     );
   }
 
@@ -78,23 +79,39 @@ class CategoriesTab extends StatelessWidget {
                               subtitle: Text(
                                 'AR: ${cat.nameAr ?? 'N/A'} • BN: ${cat.nameBn ?? 'N/A'}',
                               ),
-                              trailing: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[200],
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  'Sort Index: ${cat.sortOrder}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black54,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[200],
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      'Sort: ${cat.sortOrder}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black54,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 4),
+                                  IconButton(
+                                    icon: const Icon(LucideIcons.edit2, size: 16, color: Colors.blue),
+                                    onPressed: () => _showAddCategoryDialog(context, cat),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(LucideIcons.trash2, size: 16, color: Colors.red),
+                                    onPressed: () {
+                                      context.read<WholesaleCubit>().deleteCategory(cat.id);
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
                           );

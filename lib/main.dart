@@ -27,6 +27,14 @@ import 'repositories/daily_closing_repository.dart';
 import 'repositories/employee_expense_repository.dart';
 import 'repositories/price_compare_repository.dart';
 import 'repositories/wholesale_repository.dart';
+import 'repositories/wholesale/wholesale_customer_repository.dart';
+import 'repositories/wholesale/wholesale_category_repository.dart';
+import 'repositories/wholesale/wholesale_sale_repository.dart';
+import 'repositories/wholesale/wholesale_purchase_repository.dart';
+import 'repositories/wholesale/wholesale_order_repository.dart';
+import 'repositories/wholesale/wholesale_payment_repository.dart';
+import 'repositories/wholesale/wholesale_sales_return_repository.dart';
+import 'repositories/wholesale/wholesale_dashboard_repository.dart';
 
 import 'core/api/api_client.dart';
 import 'core/theme/app_theme.dart';
@@ -92,6 +100,14 @@ void main() async {
           value: priceCompareRepo,
         ),
         RepositoryProvider<WholesaleRepository>.value(value: wholesaleRepo),
+        RepositoryProvider<WholesaleCustomerRepository>.value(value: wholesaleRepo.customerRepo),
+        RepositoryProvider<WholesaleCategoryRepository>.value(value: wholesaleRepo.categoryRepo),
+        RepositoryProvider<WholesaleSaleRepository>.value(value: wholesaleRepo.saleRepo),
+        RepositoryProvider<WholesalePurchaseRepository>.value(value: wholesaleRepo.purchaseRepo),
+        RepositoryProvider<WholesaleOrderRepository>.value(value: wholesaleRepo.orderRepo),
+        RepositoryProvider<WholesalePaymentRepository>.value(value: wholesaleRepo.paymentRepo),
+        RepositoryProvider<WholesaleSalesReturnRepository>.value(value: wholesaleRepo.salesReturnRepo),
+        RepositoryProvider<WholesaleDashboardRepository>.value(value: wholesaleRepo.dashboardRepo),
       ],
       child: MultiBlocProvider(
         providers: [

@@ -60,11 +60,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
     minStockController = TextEditingController(text: p?.minStock != null ? p!.minStock.toString() : '5');
     descriptionController = TextEditingController(text: p?.description ?? '');
 
-    _images = List<String>.from(p?.images ?? (p?.imageUrl != null ? [p!.imageUrl!] : []));
-    _selectedCategories = List<String>.from(p?.categoryIds ?? ['test']);
-    if (_selectedCategories.isEmpty) {
-      _selectedCategories.add('test');
-    }
+    _selectedCategories = List<String>.from(p?.categoryIds ?? []);
 
     _isVisibleOnWebsite = p?.isVisibleOnWebsite ?? true;
     _isFeatured = p?.isFeatured ?? false;
@@ -205,10 +201,9 @@ class _AddProductDialogState extends State<AddProductDialog> {
     final borderColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     const primaryColor = Color(0xFF24B489);
 
-    // Read stored categories from WholesaleState
+    // Read stored categories dynamically from WholesaleState
     final stateCategories = context.watch<WholesaleCubit>().state.categories.map((c) => c.name).toList();
-    final defaultCategories = ['test', 'Dairy', 'Beverages', 'Snacks', 'Groceries', 'Bakery'];
-    final allCategories = <String>{...defaultCategories, ...stateCategories, ..._selectedCategories}.toList();
+    final allCategories = <String>{...stateCategories, ..._selectedCategories}.toList();
 
     return Dialog(
       backgroundColor: bgColor,
