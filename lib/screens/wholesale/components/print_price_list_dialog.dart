@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../blocs/wholesale/wholesale_cubit.dart';
+import '../../../services/pdf_print_service.dart';
 
 class PrintPriceListDialog extends StatefulWidget {
   const PrintPriceListDialog({super.key});
@@ -223,20 +224,21 @@ class _PrintPriceListDialogState extends State<PrintPriceListDialog> {
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
             padding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           ),
-          onPressed: () {
+          onPressed: () async {
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content:
-                    Text('Price list generated for printing.'),
-              ),
+            await PdfPrintService.printProductList(
+              products: filtered,
+              title: _searchQuery.isEmpty
+                  ? 'Product Details & Price List'
+                  : 'Filtered Product List ("$_searchQuery")',
             );
           },
           icon: const Icon(LucideIcons.printer, size: 14),
-          label: const Text('Print / Export'),
+          label: const Text('Print PDF'),
         ),
       ],
     );

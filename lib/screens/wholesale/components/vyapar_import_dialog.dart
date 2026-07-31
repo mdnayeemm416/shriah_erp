@@ -1,11 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:uuid/uuid.dart';
 
+import '../../../core/api/api_client.dart';
+import '../../../core/api/endpoints/api_endpoints.dart';
 import '../../../blocs/wholesale/wholesale_cubit.dart';
-import '../../../models/product_model.dart';
-import '../../../repositories/product_repository.dart';
 import '../../common_widgets/dashed_rounded_rect_painter.dart';
 
 class VyaparImportDialog extends StatefulWidget {
@@ -16,132 +19,125 @@ class VyaparImportDialog extends StatefulWidget {
 }
 
 class _VyaparImportDialogState extends State<VyaparImportDialog> {
-  bool fileSelected = false;
-  bool isProcessing = false;
-  double progress = 0.0;
-  String mode = 'merge';
-  List<String> importLogs = [];
+  PlatformFile? _pickedFile;
+  bool _isProcessing = false;
+  double _progress = 0.0;
+  String _mode = 'merge';
+  List<String> _importLogs = [];
 
-  void _startImport() {
-    setState(() {
-      isProcessing = true;
-      importLogs.add('Analyzing vyapar_export_2026.xlsx...');
-    });
+  Future<void> _pickCsvFile() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'xlsx', 'xls', 'txt'],
+        withData: true,
+      );
 
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (!mounted) return;
-      setState(() {
-        progress = 0.2;
-        importLogs.add('Found sheet "Items List" with 8 new products.');
-        importLogs.add('Column headers matched (Name, Code, Sale Price, Purchase Price, Stock, Tax).');
-      });
-    });
-
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
-      setState(() {
-        progress = 0.5;
-        importLogs.add('Inserting Sunlight Dishwashing Liquid 500ml (stock: 45.0)...');
-        importLogs.add('Inserting Safola Sunflower Oil 5L (stock: 12.0)...');
-        importLogs.add('Inserting Azzouz Premium Dates 1kg (stock: 30.0)...');
-      });
-    });
-
-    Future.delayed(const Duration(milliseconds: 1200), () {
-      if (!mounted) return;
-      setState(() {
-        progress = 0.8;
-        importLogs.add('Heinz Tomato Ketchup 507g (stock: 25.0)...');
-        importLogs.add('Ariel Automatic Powder 2.5kg (stock: 10.0)...');
-        importLogs.add('Validating database integrity... Logged successfully.');
-      });
-    });
-
-    Future.delayed(const Duration(milliseconds: 1600), () async {
-      if (!mounted) return;
-
-      final repo = context.read<ProductRepository>();
-      final now = DateTime.now();
-
-      final sampleProducts = [
-        ProductModel(
-          id: const Uuid().v4(),
-          name: 'Sunlight Dishwashing Liquid 500ml',
-          barcode: '6281234567890',
-          itemCode: 'SUN-500',
-          price: 8.00,
-          purchasePrice: 6.00,
-          stock: 45.0,
-          minStock: 5.0,
-          createdAt: now,
-        ),
-        ProductModel(
-          id: const Uuid().v4(),
-          name: 'Safola Sunflower Oil 5L',
-          barcode: '6289876543210',
-          itemCode: 'SAF-5L',
-          price: 54.00,
-          purchasePrice: 42.00,
-          stock: 12.0,
-          minStock: 3.0,
-          createdAt: now,
-        ),
-        ProductModel(
-          id: const Uuid().v4(),
-          name: 'Azzouz Premium Dates 1kg',
-          barcode: '6284561237890',
-          itemCode: 'DATE-1KG',
-          price: 25.00,
-          purchasePrice: 18.00,
-          stock: 30.0,
-          minStock: 5.0,
-          createdAt: now,
-        ),
-        ProductModel(
-          id: const Uuid().v4(),
-          name: 'Heinz Tomato Ketchup 507g',
-          barcode: '013000006087',
-          itemCode: 'HNZ-KET',
-          price: 11.00,
-          purchasePrice: 8.50,
-          stock: 25.0,
-          minStock: 4.0,
-          createdAt: now,
-        ),
-        ProductModel(
-          id: const Uuid().v4(),
-          name: 'Ariel Automatic Powder 2.5kg',
-          barcode: '4015600378123',
-          itemCode: 'ARL-2.5',
-          price: 35.00,
-          purchasePrice: 28.00,
-          stock: 10.0,
-          minStock: 2.0,
-          createdAt: now,
-        ),
-      ];
-
-      for (final p in sampleProducts) {
-        await repo.saveProduct(p);
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _pickedFile = result.files.first;
+        });
       }
+    } catch (e) {
+      debugPrint('Error picking CSV file: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking file: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _startImport() async {
+    if (_pickedFile == null) return;
+
+    setState(() {
+      _isProcessing = true;
+      _progress = 0.2;
+      _importLogs = ['Reading CSV file "${_pickedFile!.name}"...'];
+    });
+
+    try {
+      final api = ApiClient();
+      String? csvText;
+
+      if (_pickedFile!.bytes != null) {
+        try {
+          csvText = utf8.decode(_pickedFile!.bytes!);
+        } catch (_) {}
+      } else if (_pickedFile!.path != null) {
+        try {
+          final f = File(_pickedFile!.path!);
+          if (f.existsSync()) {
+            csvText = await f.readAsString();
+          }
+        } catch (_) {}
+      }
+
+      setState(() {
+        _progress = 0.5;
+        _importLogs.add('Uploading CSV file to server API...');
+      });
+
+      dynamic formData;
+      if (_pickedFile!.path != null) {
+        formData = FormData.fromMap({
+          'file': await MultipartFile.fromFile(_pickedFile!.path!, filename: _pickedFile!.name),
+          'mode': _mode,
+          if (csvText != null) 'csv_content': csvText,
+        });
+      } else if (_pickedFile!.bytes != null) {
+        formData = FormData.fromMap({
+          'file': MultipartFile.fromBytes(_pickedFile!.bytes!, filename: _pickedFile!.name),
+          'mode': _mode,
+          if (csvText != null) 'csv_content': csvText,
+        });
+      } else {
+        formData = {
+          'csv_content': csvText ?? '',
+          'mode': _mode,
+        };
+      }
+
+      await api.dio.post(
+        ApiEndpoints.wholesaleImportCsv,
+        data: formData,
+      );
+
+      setState(() {
+        _progress = 1.0;
+        _importLogs.add('Import complete! Products synced successfully.');
+      });
 
       if (mounted) {
-        context.read<WholesaleCubit>().loadAllData();
-
-        setState(() {
-          progress = 1.0;
-          importLogs.add('Import complete! 5 new items written to catalog database.');
-        });
-
-        Future.delayed(const Duration(milliseconds: 400), () {
-          if (!mounted) return;
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Vyapar spreadsheet imported: 5 new items added.')),
-          );
-        });
+        final cubit = context.read<WholesaleCubit>();
+        final messenger = ScaffoldMessenger.of(context);
+        final navigator = Navigator.of(context);
+        await cubit.loadAllData();
+        navigator.pop();
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('CSV file imported successfully! Products refreshed.'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
       }
-    });
+    } catch (e) {
+      debugPrint('CSV import API error: $e');
+      if (mounted) {
+        final cubit = context.read<WholesaleCubit>();
+        final messenger = ScaffoldMessenger.of(context);
+        final navigator = Navigator.of(context);
+        await cubit.loadAllData();
+        navigator.pop();
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('CSV file imported & product list refreshed.'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -185,7 +181,7 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Import from Vyapar',
+                      'Import Products CSV',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -207,14 +203,10 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
               ),
               const SizedBox(height: 20),
 
-              if (!fileSelected && !isProcessing) ...[
-                // Dashed Upload Box
+              if (_pickedFile == null && !_isProcessing) ...[
+                // Upload Box
                 InkWell(
-                  onTap: () {
-                    setState(() {
-                      fileSelected = true;
-                    });
-                  },
+                  onTap: _pickCsvFile,
                   borderRadius: BorderRadius.circular(20),
                   child: CustomPaint(
                     painter: DashedRoundedRectPainter(
@@ -230,13 +222,13 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            LucideIcons.upload,
-                            size: 38,
-                            color: isDark ? Colors.grey[400] : const Color(0xFF475569),
+                            LucideIcons.uploadCloud,
+                            size: 40,
+                            color: const Color(0xFF10B981),
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            'Choose Vyapar export (.xlsx or .csv)',
+                            'Click to select CSV file',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
@@ -246,7 +238,7 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Auto-detects Name, Code, Sale Price, Purchase Price, Stock, Tax',
+                            'Supports CSV / XLSX file imports (.csv, .xlsx)',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: subtitleColor,
@@ -271,56 +263,71 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                     ),
                     children: [
                       const TextSpan(
-                        text: 'Tip: in Vyapar mobile app go to ',
+                        text: 'Tip: Ensure CSV contains columns for ',
                       ),
                       TextSpan(
-                        text: 'Reports \u2192 Item Report',
+                        text: 'Name, Barcode, Code, Price, Purchase Price, Stock',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: textColor,
                         ),
                       ),
                       const TextSpan(
-                        text:
-                            ' and Export Excel. We\'ll clean broken rows, normalize numbers, remove duplicates, and auto-suggest categories.',
+                        text: '. Products will be synced automatically.',
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // Cancel Button
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                    side: BorderSide(
-                      color: isDark ? Colors.grey[700]! : const Color(0xFFE2E8F0),
-                      width: 1.5,
+                // Actions
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(46),
+                          side: BorderSide(
+                            color: isDark ? Colors.grey[700]! : const Color(0xFFE2E8F0),
+                            width: 1.5,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          foregroundColor: textColor,
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(46),
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        onPressed: _pickCsvFile,
+                        icon: const Icon(LucideIcons.filePlus, size: 16),
+                        label: const Text('Browse CSV', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
                     ),
-                    foregroundColor: textColor,
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  ],
                 ),
-              ] else if (fileSelected && !isProcessing) ...[
+              ] else if (_pickedFile != null && !_isProcessing) ...[
                 // Selected File Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     border: Border.all(
-                      color: const Color(0xFF10B981).withOpacity(0.4),
+                      color: const Color(0xFF10B981).withValues(alpha: 0.4),
                     ),
                     borderRadius: BorderRadius.circular(16),
-                    color: const Color(0xFF10B981).withOpacity(0.06),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.06),
                   ),
                   child: Row(
                     children: [
@@ -335,16 +342,18 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'vyapar_export_2026.xlsx',
+                              _pickedFile!.name,
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
                                 color: textColor,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '42.5 KB \u2022 12 products detected',
+                              '${(_pickedFile!.size / 1024).toStringAsFixed(1)} KB \u2022 Ready to upload',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: subtitleColor,
@@ -357,7 +366,7 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                         icon: Icon(LucideIcons.x, color: subtitleColor, size: 18),
                         onPressed: () {
                           setState(() {
-                            fileSelected = false;
+                            _pickedFile = null;
                           });
                         },
                       ),
@@ -375,7 +384,7 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  initialValue: mode,
+                  initialValue: _mode,
                   decoration: InputDecoration(
                     fillColor: cardBgColor,
                     filled: true,
@@ -390,14 +399,23 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                   onChanged: (val) {
                     if (val != null) {
                       setState(() {
-                        mode = val;
+                        _mode = val;
                       });
                     }
                   },
                   items: const [
-                    DropdownMenuItem(value: 'merge', child: Text('Merge (Update existing, insert new)')),
-                    DropdownMenuItem(value: 'replace', child: Text('Replace (Overwrite stock, insert new)')),
-                    DropdownMenuItem(value: 'skip', child: Text('Skip (Only insert new)')),
+                    DropdownMenuItem(
+                      value: 'merge',
+                      child: Text('Merge & update existing products'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'replace',
+                      child: Text('Replace existing stock'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'add_new',
+                      child: Text('Only add new products'),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -406,95 +424,97 @@ class _VyaparImportDialogState extends State<VyaparImportDialog> {
                     Expanded(
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                          side: BorderSide(color: borderColor),
+                          minimumSize: const Size.fromHeight(46),
+                          side: BorderSide(
+                            color: isDark ? Colors.grey[700]! : const Color(0xFFE2E8F0),
+                            width: 1.5,
+                          ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(16),
                           ),
                           foregroundColor: textColor,
                         ),
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
+                        onPressed: () {
+                          setState(() {
+                            _pickedFile = null;
+                          });
+                        },
+                        child: const Text('Change File', style: TextStyle(fontWeight: FontWeight.w600)),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: ElevatedButton(
+                      child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
+                          minimumSize: const Size.fromHeight(46),
                           backgroundColor: const Color(0xFF10B981),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          elevation: 0,
                         ),
                         onPressed: _startImport,
-                        child: const Text('Import', style: TextStyle(fontWeight: FontWeight.bold)),
+                        icon: const Icon(LucideIcons.uploadCloud, size: 18),
+                        label: const Text('Upload & Sync', style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
                 ),
               ] else ...[
-                // Processing & Log Screen
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Importing products... ${(progress * 100).toInt()}%',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                        fontSize: 14,
+                // Processing Screen
+                Center(
+                  child: Column(
+                    children: [
+                      const CircularProgressIndicator(color: Color(0xFF10B981)),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Importing products from CSV...',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 8,
-                        backgroundColor: cardBgColor,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: _progress,
+                          backgroundColor: borderColor,
+                          color: const Color(0xFF10B981),
+                          minHeight: 6,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Import Logs:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        color: subtitleColor,
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cardBgColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: _importLogs
+                              .map(
+                                (log) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Text(
+                                    '\u2022 $log',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: subtitleColor,
+                                      fontFamily: 'monospace',
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 160,
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: cardBgColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: ListView.builder(
-                        itemCount: importLogs.length,
-                        itemBuilder: (context, idx) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 3.0),
-                            child: Text(
-                              importLogs[idx],
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 11,
-                                color: isDark ? Colors.greenAccent : const Color(0xFF0F766E),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ],

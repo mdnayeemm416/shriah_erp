@@ -20,6 +20,8 @@ import '../../repositories/company_transaction_repository.dart';
 import '../../repositories/cash_snapshot_repository.dart';
 import '../../repositories/wholesale_repository.dart';
 import '../../models/wholesale_models.dart';
+import '../../models/opening_balance_model.dart';
+import '../../repositories/opening_balance_repository.dart';
 
 class SummaryScreen extends StatefulWidget {
   const SummaryScreen({super.key});
@@ -73,6 +75,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
     _amountControllers = [];
   }
 
+  Map<String, dynamic>? _remoteSummary;
+  OpeningBalanceModel? _openingBalanceModel;
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
@@ -82,6 +87,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
       final companyRepo = context.read<CompanyTransactionRepository>();
       final snapshotRepo = context.read<CashSnapshotRepository>();
       final wholesaleRepo = context.read<WholesaleRepository>();
+      final openingBalanceRepo = context.read<OpeningBalanceRepository>();
 
       final shops = await shopRepo.getShops();
       final shopEntries = await shopRepo.getEntries();
@@ -93,12 +99,18 @@ class _SummaryScreenState extends State<SummaryScreen> {
       final wholesaleCustomers = await wholesaleRepo.getCustomers();
       final wholesaleSales = await wholesaleRepo.getSales();
       final wholesalePayments = await wholesaleRepo.getPayments();
+      final remoteSummary = await wholesaleRepo.getDashboardSummary();
+      final openingBalanceModel = await openingBalanceRepo.getOpeningBalance();
 
       _disposeControllers();
 
       for (final h in holders) {
         _nameControllers.add(TextEditingController(text: h.name));
-        _amountControllers.add(TextEditingController(text: h.amount == 0.0 ? '' : h.amount.toString()));
+        _amountControllers.add(
+          TextEditingController(
+            text: h.amount == 0.0 ? '' : h.amount.toString(),
+          ),
+        );
       }
 
       setState(() {
@@ -112,14 +124,16 @@ class _SummaryScreenState extends State<SummaryScreen> {
         _wholesaleCustomers = wholesaleCustomers;
         _wholesaleSales = wholesaleSales;
         _wholesalePayments = wholesalePayments;
+        _remoteSummary = remoteSummary;
+        _openingBalanceModel = openingBalanceModel;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading data: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
     }
   }
 
@@ -130,14 +144,16 @@ class _SummaryScreenState extends State<SummaryScreen> {
     return context.watch<WorkingDateCubit>().state;
   }
 
-  DateTime get _monthStart => DateTime(_workingDate.year, _workingDate.month, 1);
+  DateTime get _monthStart =>
+      DateTime(_workingDate.year, _workingDate.month, 1);
   DateTime get _monthEnd => _workingDate;
 
   bool _isInRange(DateTime date, DateTime from, DateTime to) {
     final d = DateTime(date.year, date.month, date.day);
     final f = DateTime(from.year, from.month, from.day);
     final t = DateTime(to.year, to.month, to.day);
-    return (d.isAtSameMomentAs(f) || d.isAfter(f)) && (d.isAtSameMomentAs(t) || d.isBefore(t));
+    return (d.isAtSameMomentAs(f) || d.isAfter(f)) &&
+        (d.isAtSameMomentAs(t) || d.isBefore(t));
   }
 
   // Helper formatting for currency
@@ -195,14 +211,22 @@ class _SummaryScreenState extends State<SummaryScreen> {
   }
 
   double get _wholesaleReceivables {
-    final openingDues = _wholesaleCustomers.fold(0.0, (sum, c) => sum + c.openingDue);
-    final salesDues = _wholesaleSales.where((s) => s.status != 'cancelled').fold(0.0, (sum, s) => sum + s.dueAmount);
-    final paymentsIn = _wholesalePayments.where((p) => p.kind == 'payment_in').fold(0.0, (sum, p) => sum + p.amount);
+    final openingDues = _wholesaleCustomers.fold(
+      0.0,
+      (sum, c) => sum + c.openingDue,
+    );
+    final salesDues = _wholesaleSales
+        .where((s) => s.status != 'cancelled')
+        .fold(0.0, (sum, s) => sum + s.dueAmount);
+    final paymentsIn = _wholesalePayments
+        .where((p) => p.kind == 'payment_in')
+        .fold(0.0, (sum, p) => sum + p.amount);
     final total = openingDues + salesDues - paymentsIn;
     return total > 0 ? total : 0.0;
   }
 
-  double get _wholesaleCurrentValue => _currentStockValue + _wholesaleReceivables;
+  double get _wholesaleCurrentValue =>
+      _currentStockValue + _wholesaleReceivables;
 
   double get _employeeOutstanding {
     double given = 0.0;
@@ -232,9 +256,502 @@ class _SummaryScreenState extends State<SummaryScreen> {
     return opening + income - expense;
   }
 
-  double get _totalInvest => _companyOpeningCapital + _totalShopCashPosition + _currentCompanyBalance;
+  double get _openingCapital {
+    if (_openingBalanceModel != null && _openingBalanceModel!.amount > 0) {
+      return _openingBalanceModel!.amount;
+    }
+    if (_remoteSummary != null &&
+        _remoteSummary!['companyOpeningCapital'] != null) {
+      return (_remoteSummary!['companyOpeningCapital'] as num).toDouble();
+    }
+    return _companyOpeningCapital;
+  }
 
-  double get _totalCashInApp => _totalInvest - _wholesaleCurrentValue - _employeeOutstanding;
+  Future<void> _showEditOpeningBalanceDialog() async {
+    final workingDate = context.read<WorkingDateCubit>().state;
+    final defaultDateStr = DateFormat('yyyy-MM-dd').format(workingDate);
+
+    final amountController = TextEditingController(text: '');
+    final dateController = TextEditingController(
+      text: _openingBalanceModel?.date ?? defaultDateStr,
+    );
+    final notesController = TextEditingController(text: '');
+
+    bool isSaving = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: isDark ? AppColors.cardDark : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(LucideIcons.lock, color: AppColors.primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Set Opening Balance',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: 'Opening Balance Amount (SAR)',
+                        hintText: 'e.g. 50000.00',
+                        prefixIcon: const Icon(LucideIcons.dollarSign, size: 18),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: isDark ? AppColors.inputDark : Colors.grey.shade50,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: dateController,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Date',
+                        prefixIcon: const Icon(LucideIcons.calendar, size: 18),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: isDark ? AppColors.inputDark : Colors.grey.shade50,
+                      ),
+                      onTap: () async {
+                        final parsed = DateTime.tryParse(dateController.text) ?? DateTime.now();
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: parsed,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          dateController.text = DateFormat('yyyy-MM-dd').format(picked);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: notesController,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        labelText: 'Notes / Description',
+                        hintText: 'Company opening capital / register cash',
+                        prefixIcon: const Icon(LucideIcons.fileText, size: 18),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: isDark ? AppColors.inputDark : Colors.grey.shade50,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final amt = double.tryParse(amountController.text.trim());
+                          if (amt == null || amt < 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please enter a valid amount'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() => isSaving = true);
+                          try {
+                            final repo = context.read<OpeningBalanceRepository>();
+                            final updated = await repo.setOpeningBalance(
+                              amount: amt,
+                              date: dateController.text.trim(),
+                              notes: notesController.text.trim(),
+                            );
+                            if (mounted) {
+                              setState(() {
+                                _openingBalanceModel = updated;
+                              });
+                              await _loadData();
+                            }
+                            if (dialogCtx.mounted) {
+                              Navigator.pop(dialogCtx);
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Opening balance updated successfully'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            setDialogState(() => isSaving = false);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to update opening balance: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Save Opening Balance'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showWriteCompanyBalanceDialog() async {
+    final workingDate = context.read<WorkingDateCubit>().state;
+    final currentBal = _currentCompanyBalance;
+
+    int modeIndex = 0; // 0 = Direct Target Balance, 1 = Add Income/Expense Txn
+    final targetBalController = TextEditingController(
+      text: currentBal.toStringAsFixed(2),
+    );
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+    String txnType = 'in';
+    String category = 'Capital Deposit';
+
+    bool isSaving = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: isDark ? AppColors.cardDark : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(LucideIcons.building2, color: Colors.blue, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Update Company Balance',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.inputDark : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Current Balance:',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          Text(
+                            _fmt(currentBal),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('Set Balance'),
+                            selected: modeIndex == 0,
+                            onSelected: (val) {
+                              if (val) setDialogState(() => modeIndex = 0);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('Add Transaction'),
+                            selected: modeIndex == 1,
+                            onSelected: (val) {
+                              if (val) setDialogState(() => modeIndex = 1);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (modeIndex == 0) ...[
+                      TextField(
+                        controller: targetBalController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'New Target Balance (SAR)',
+                          prefixIcon: const Icon(LucideIcons.dollarSign, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: isDark ? AppColors.inputDark : Colors.grey.shade50,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: notesController,
+                        decoration: InputDecoration(
+                          labelText: 'Adjustment Note (Optional)',
+                          prefixIcon: const Icon(LucideIcons.fileText, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: isDark ? AppColors.inputDark : Colors.grey.shade50,
+                        ),
+                      ),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilterChip(
+                              label: const Text('+ Income (In)'),
+                              selected: txnType == 'in',
+                              selectedColor: Colors.green.shade100,
+                              onSelected: (val) {
+                                if (val) setDialogState(() => txnType = 'in');
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: FilterChip(
+                              label: const Text('- Expense (Out)'),
+                              selected: txnType == 'out',
+                              selectedColor: Colors.red.shade100,
+                              onSelected: (val) {
+                                if (val) setDialogState(() => txnType = 'out');
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: amountController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'Amount (SAR)',
+                          prefixIcon: const Icon(LucideIcons.dollarSign, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: isDark ? AppColors.inputDark : Colors.grey.shade50,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: category,
+                        decoration: InputDecoration(
+                          labelText: 'Category',
+                          prefixIcon: const Icon(LucideIcons.tag, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: isDark ? AppColors.inputDark : Colors.grey.shade50,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Capital Deposit', child: Text('Capital Deposit')),
+                          DropdownMenuItem(value: 'Bank Transfer', child: Text('Bank Transfer')),
+                          DropdownMenuItem(value: 'Operating Expense', child: Text('Operating Expense')),
+                          DropdownMenuItem(value: 'Adjustment', child: Text('Adjustment')),
+                          DropdownMenuItem(value: 'Other', child: Text('Other')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setDialogState(() => category = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: notesController,
+                        decoration: InputDecoration(
+                          labelText: 'Notes / Remarks',
+                          prefixIcon: const Icon(LucideIcons.fileText, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: isDark ? AppColors.inputDark : Colors.grey.shade50,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          setDialogState(() => isSaving = true);
+                          try {
+                            final companyRepo = context.read<CompanyTransactionRepository>();
+                            const uuid = Uuid();
+
+                            if (modeIndex == 0) {
+                              final target = double.tryParse(targetBalController.text.trim());
+                              if (target == null) {
+                                setDialogState(() => isSaving = false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please enter a valid target balance'), backgroundColor: Colors.red),
+                                );
+                                return;
+                              }
+                              final diff = target - currentBal;
+                              if (diff.abs() > 0.001) {
+                                final txn = CompanyTransactionModel(
+                                  id: uuid.v4(),
+                                  amount: diff.abs(),
+                                  category: 'Balance Adjustment',
+                                  notes: notesController.text.trim().isNotEmpty
+                                      ? notesController.text.trim()
+                                      : 'Direct balance adjustment to ${target.toStringAsFixed(2)} SAR',
+                                  txnDate: workingDate,
+                                  txnType: diff >= 0 ? 'in' : 'out',
+                                  createdAt: DateTime.now(),
+                                );
+                                await companyRepo.saveTransaction(txn);
+                              }
+                            } else {
+                              final amt = double.tryParse(amountController.text.trim());
+                              if (amt == null || amt <= 0) {
+                                setDialogState(() => isSaving = false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please enter a valid amount'), backgroundColor: Colors.red),
+                                );
+                                return;
+                              }
+                              final txn = CompanyTransactionModel(
+                                id: uuid.v4(),
+                                amount: amt,
+                                category: category,
+                                notes: notesController.text.trim().isNotEmpty
+                                    ? notesController.text.trim()
+                                    : null,
+                                txnDate: workingDate,
+                                txnType: txnType,
+                                createdAt: DateTime.now(),
+                              );
+                              await companyRepo.saveTransaction(txn);
+                            }
+
+                            if (mounted) {
+                              await _loadData();
+                            }
+                            if (dialogCtx.mounted) {
+                              Navigator.pop(dialogCtx);
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Company balance updated successfully'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            setDialogState(() => isSaving = false);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to update company balance: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Update Balance'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  double get _totalInvest =>
+      _openingCapital + _totalShopCashPosition + _currentCompanyBalance;
+
+  double get _totalCashInApp =>
+      _totalInvest - _wholesaleCurrentValue - _employeeOutstanding;
 
   double get _totalCashInHand => _holders.fold(0.0, (sum, h) => sum + h.amount);
 
@@ -278,7 +795,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
       cashInHand: _totalCashInHand,
       cashInApp: _totalCashInApp,
       difference: _difference,
-      holders: _holders.map((h) => CashHolderModel(name: h.name, amount: h.amount)).toList(),
+      holders: _holders
+          .map((h) => CashHolderModel(name: h.name, amount: h.amount))
+          .toList(),
       createdAt: DateTime.now(),
     );
     await repo.saveSnapshot(snapshot);
@@ -287,9 +806,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
     setState(() {
       _snapshots = list;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Saved snapshot for $dateStr')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Saved snapshot for $dateStr')));
   }
 
   Future<void> _deleteSnapshot(String id) async {
@@ -300,9 +819,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
     setState(() {
       _snapshots = list;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Snapshot deleted')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Snapshot deleted')));
   }
 
   // --- Breakdown Sheets ---
@@ -323,7 +842,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
             return Container(
               decoration: BoxDecoration(
                 color: isDark ? AppColors.bgDark : Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
               ),
               child: Column(
                 children: [
@@ -355,22 +876,38 @@ class _SummaryScreenState extends State<SummaryScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                             side: BorderSide(
-                              color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : AppColors.borderLight,
                             ),
                           ),
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: Colors.teal.shade50,
-                              child: const Icon(LucideIcons.store, color: AppColors.primary, size: 20),
+                              child: const Icon(
+                                LucideIcons.store,
+                                color: AppColors.primary,
+                                size: 20,
+                              ),
                             ),
                             title: Text(
                               shop.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
                             ),
-                            subtitle: Text(shop.shopType == 'simple_cash' ? 'Simple Cash' : 'Full ERP'),
+                            subtitle: Text(
+                              shop.shopType == 'simple_cash'
+                                  ? 'Simple Cash'
+                                  : 'Full ERP',
+                            ),
                             trailing: Text(
                               _fmt(pos),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                         );
@@ -383,7 +920,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       color: isDark ? AppColors.cardDark : Colors.teal.shade50,
                       border: Border(
                         top: BorderSide(
-                          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                          color: isDark
+                              ? AppColors.borderDark
+                              : AppColors.borderLight,
                         ),
                       ),
                     ),
@@ -392,7 +931,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       children: [
                         const Text(
                           'Total Cash Position',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                         Text(
                           _fmt(_totalShopCashPosition),
@@ -461,7 +1003,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   children: [
                     const Text(
                       'Current Value',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                     Text(
                       _fmt(_wholesaleCurrentValue),
@@ -502,8 +1047,13 @@ class _SummaryScreenState extends State<SummaryScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -512,7 +1062,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
               const SizedBox(height: 16),
               const Text(
                 'Formula:',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                ),
               ),
               const SizedBox(height: 6),
               Container(
@@ -524,7 +1078,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 ),
                 child: Text(
                   formula,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11, height: 1.3),
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    height: 1.3,
+                  ),
                 ),
               ),
             ],
@@ -543,8 +1101,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
   // --- Styling Helpers for Verification Card ---
 
   Color _getStatusBgColor(double diff, bool isDark) {
-    if (diff.abs() <= 0.01) return isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5);
-    if (diff < -0.01) return isDark ? const Color(0xFF991B1B) : const Color(0xFFFEF2F2);
+    if (diff.abs() <= 0.01)
+      return isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5);
+    if (diff < -0.01)
+      return isDark ? const Color(0xFF991B1B) : const Color(0xFFFEF2F2);
     return isDark ? const Color(0xFF78350F) : const Color(0xFFFFFBEB);
   }
 
@@ -555,8 +1115,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
   }
 
   Color _getStatusTextColor(double diff, bool isDark) {
-    if (diff.abs() <= 0.01) return isDark ? const Color(0xFFA7F3D0) : const Color(0xFF047857);
-    if (diff < -0.01) return isDark ? const Color(0xFFFECACA) : const Color(0xFFB91C1C);
+    if (diff.abs() <= 0.01)
+      return isDark ? const Color(0xFFA7F3D0) : const Color(0xFF047857);
+    if (diff < -0.01)
+      return isDark ? const Color(0xFFFECACA) : const Color(0xFFB91C1C);
     return isDark ? const Color(0xFFFDE68A) : const Color(0xFFB45309);
   }
 
@@ -575,9 +1137,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -585,48 +1145,52 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Welcome banner with Date Selector
-            _buildWelcomeBanner(formattedDate, isDark),
-            const SizedBox(height: 16),
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Welcome banner with Date Selector
+              _buildWelcomeBanner(formattedDate, isDark),
+              const SizedBox(height: 16),
 
-            // 2. Large sticky cash card: Total Cash In App
-            _buildTotalCashInAppCard(isDark),
-            const SizedBox(height: 12),
+              // 2. Large sticky cash card: Total Cash In App
+              _buildTotalCashInAppCard(isDark),
+              const SizedBox(height: 12),
 
-            // 3. Ask AI promo banner
-            _buildAskAIPromoted(isDark),
-            const SizedBox(height: 16),
+              // 3. Ask AI promo banner
+              _buildAskAIPromoted(isDark),
+              const SizedBox(height: 16),
 
-            // 4. Section: Company Foundation
-            _buildSectionHeader('01', 'Company Foundation', isDark),
-            _buildCompanyFoundationCard(isDark),
-            const SizedBox(height: 16),
+              // 4. Section: Company Foundation
+              _buildSectionHeader('01', 'Company Foundation', isDark),
+              _buildCompanyFoundationCard(isDark),
+              const SizedBox(height: 16),
 
-            // 5. Section: Wholesale & Employee
-            _buildSectionHeader('02', 'Wholesale & Employee', isDark),
-            _buildWholesaleEmployeeGrid(isDark),
-            const SizedBox(height: 16),
+              // 5. Section: Wholesale & Employee
+              _buildSectionHeader('02', 'Wholesale & Employee', isDark),
+              _buildWholesaleEmployeeGrid(isDark),
+              const SizedBox(height: 16),
 
-            // 6. Section: Cash In Hand
-            _buildSectionHeader('03', 'Cash In Hand', isDark),
-            _buildCashInHandCard(isDark, formattedDate),
-            const SizedBox(height: 16),
+              // 6. Section: Cash In Hand
+              _buildSectionHeader('03', 'Cash In Hand', isDark),
+              _buildCashInHandCard(isDark, formattedDate),
+              const SizedBox(height: 16),
 
-            // 7. Section: Cash In Hand History
-            _buildSectionHeader('04', 'Cash In Hand History', isDark),
-            _buildHistoryCard(isDark),
-            const SizedBox(height: 16),
+              // 7. Section: Cash In Hand History
+              _buildSectionHeader('04', 'Cash In Hand History', isDark),
+              _buildHistoryCard(isDark),
+              const SizedBox(height: 16),
 
-            // 8. Section: Verification
-            _buildSectionHeader('05', 'Verification', isDark),
-            _buildVerificationCard(isDark),
-            const SizedBox(height: 24),
-          ],
+              // 8. Section: Verification
+              _buildSectionHeader('05', 'Verification', isDark),
+              _buildVerificationCard(isDark),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );
@@ -639,10 +1203,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.primary,
-            AppColors.primaryGlow.withBlue(150),
-          ],
+          colors: [AppColors.primary, AppColors.primaryGlow.withBlue(150)],
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
@@ -650,7 +1211,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
             color: AppColors.primary.withAlpha(40),
             blurRadius: 12,
             offset: const Offset(0, 4),
-          )
+          ),
         ],
       ),
       child: Row(
@@ -673,52 +1234,79 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 SizedBox(height: 4),
                 Text(
                   'Real-time cash logs, staff balances, and daily reconciliations.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white70,
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.white70),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          // Working Date trigger pill (Compact)
-          Material(
-            color: Colors.white24,
-            borderRadius: BorderRadius.circular(20),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _workingDate,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2030),
-                );
-                if (picked != null) {
-                  if (!mounted) return;
-                  context.read<WorkingDateCubit>().changeDate(picked);
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(LucideIcons.calendarCheck, size: 14, color: Colors.white),
-                    const SizedBox(width: 6),
-                    Text(
-                      formattedDate,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(
+                  LucideIcons.refreshCw,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                tooltip: 'Refresh Live Data',
+                onPressed: () {
+                  _loadData();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Refreshing dashboard metrics from server...',
                       ),
+                      duration: Duration(seconds: 1),
                     ),
-                  ],
+                  );
+                },
+              ),
+              const SizedBox(width: 4),
+              // Working Date trigger pill (Compact)
+              Material(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(20),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _workingDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2030),
+                    );
+                    if (picked != null) {
+                      if (!mounted) return;
+                      context.read<WorkingDateCubit>().changeDate(picked);
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          LucideIcons.calendarCheck,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          formattedDate,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -756,7 +1344,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 color: Colors.teal.shade50,
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(LucideIcons.wallet, color: AppColors.primary, size: 24),
+              child: const Icon(
+                LucideIcons.wallet,
+                color: AppColors.primary,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -807,12 +1399,17 @@ class _SummaryScreenState extends State<SummaryScreen> {
           context: context,
           builder: (context) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               title: const Row(
                 children: [
                   Icon(LucideIcons.sparkles, color: AppColors.primary),
                   SizedBox(width: 8),
-                  Text('AI Insights', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    'AI Insights',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
               content: const Text(
@@ -835,7 +1432,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? AppColors.borderDark : AppColors.primary.withAlpha(50),
+            color: isDark
+                ? AppColors.borderDark
+                : AppColors.primary.withAlpha(50),
           ),
         ),
         child: Padding(
@@ -849,7 +1448,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   color: AppColors.primary.withAlpha(30),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(LucideIcons.sparkles, color: AppColors.primary, size: 18),
+                child: const Icon(
+                  LucideIcons.sparkles,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -858,7 +1461,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   children: [
                     Text(
                       'Ask AI Insights',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                     Text(
                       'Ask automated questions & get data comparisons.',
@@ -867,7 +1473,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   ],
                 ),
               ),
-              const Icon(LucideIcons.chevronRight, color: Colors.grey, size: 16),
+              const Icon(
+                LucideIcons.chevronRight,
+                color: Colors.grey,
+                size: 16,
+              ),
             ],
           ),
         ),
@@ -945,7 +1555,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                     color: isDark ? AppColors.inputDark : Colors.teal.shade50,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(LucideIcons.landmark, color: AppColors.primary, size: 20),
+                  child: const Icon(
+                    LucideIcons.landmark,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -974,12 +1588,16 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(LucideIcons.info, size: 16, color: Colors.grey),
+                  icon: const Icon(
+                    LucideIcons.info,
+                    size: 16,
+                    color: Colors.grey,
+                  ),
                   onPressed: () {
                     _showFormulaDialog(
                       'Total Invest',
                       'Total operational capital currently inside cash cycles.',
-                      'Opening Balance:    ${_companyOpeningCapital.toStringAsFixed(2)} SAR\n+ Total Shop Cash:   ${_totalShopCashPosition.toStringAsFixed(2)} SAR\n+ Company Balance:   ${_currentCompanyBalance.toStringAsFixed(2)} SAR\n────────────────────\n= Total Invest:      ${_totalInvest.toStringAsFixed(2)} SAR',
+                      'Opening Balance:    ${_openingCapital.toStringAsFixed(2)} SAR\n+ Total Shop Cash:   ${_totalShopCashPosition.toStringAsFixed(2)} SAR\n+ Company Balance:   ${_currentCompanyBalance.toStringAsFixed(2)} SAR\n────────────────────\n= Total Invest:      ${_totalInvest.toStringAsFixed(2)} SAR',
                     );
                   },
                 ),
@@ -995,14 +1613,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
             Expanded(
               child: _buildSubFoundationCard(
                 label: 'Opening Balance',
-                value: _companyOpeningCapital,
+                value: _openingCapital,
                 icon: LucideIcons.lock,
                 isDark: isDark,
+                onTap: _showEditOpeningBalanceDialog,
                 onInfo: () {
                   _showFormulaDialog(
                     'Company Opening Balance',
                     'Fixed baseline capital allocation for the operational account.',
-                    '= ${_companyOpeningCapital.toStringAsFixed(2)} SAR',
+                    '= ${_openingCapital.toStringAsFixed(2)} SAR',
                   );
                 },
               ),
@@ -1065,7 +1684,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                           height: 28,
                           width: 28,
                           decoration: BoxDecoration(
-                            color: isDark ? AppColors.inputDark : Colors.teal.shade50,
+                            color: isDark
+                                ? AppColors.inputDark
+                                : Colors.teal.shade50,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(icon, color: AppColors.primary, size: 14),
@@ -1089,7 +1710,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   IconButton(
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
-                    icon: const Icon(LucideIcons.info, size: 14, color: Colors.grey),
+                    icon: const Icon(
+                      LucideIcons.info,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
                     onPressed: onInfo,
                   ),
                 ],
@@ -1110,7 +1735,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                     ),
                   ),
                   if (onTap != null)
-                    const Icon(LucideIcons.chevronRight, size: 14, color: Colors.grey),
+                    const Icon(
+                      LucideIcons.chevronRight,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
                 ],
               ),
             ],
@@ -1119,7 +1748,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
       ),
     );
   }
-
 
   Widget _buildWholesaleEmployeeGrid(bool isDark) {
     return Column(
@@ -1167,6 +1795,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
           icon: LucideIcons.building2,
           isDark: isDark,
           fullWidth: true,
+          onTap: _showWriteCompanyBalanceDialog,
           onInfo: () {
             _showFormulaDialog(
               'Current Company Balance',
@@ -1215,7 +1844,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                           height: 28,
                           width: 28,
                           decoration: BoxDecoration(
-                            color: isDark ? AppColors.inputDark : Colors.teal.shade50,
+                            color: isDark
+                                ? AppColors.inputDark
+                                : Colors.teal.shade50,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(icon, color: AppColors.primary, size: 14),
@@ -1239,7 +1870,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   IconButton(
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
-                    icon: const Icon(LucideIcons.info, size: 14, color: Colors.grey),
+                    icon: const Icon(
+                      LucideIcons.info,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
                     onPressed: onInfo,
                   ),
                 ],
@@ -1260,7 +1895,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                     ),
                   ),
                   if (onTap != null)
-                    const Icon(LucideIcons.chevronRight, size: 16, color: Colors.grey),
+                    const Icon(
+                      LucideIcons.chevronRight,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
                 ],
               ),
             ],
@@ -1305,7 +1944,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 38),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               onPressed: _addHolder,
               icon: const Icon(LucideIcons.plus, size: 16),
@@ -1332,7 +1973,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   ),
                   Text(
                     _fmt(_totalCashInHand),
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ],
               ),
@@ -1343,7 +1987,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 minimumSize: const Size(double.infinity, 40),
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               onPressed: _saveTodaySnapshot,
               icon: const Icon(LucideIcons.save, size: 16),
@@ -1367,7 +2013,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             onChanged: (val) {
-              _holders[index] = CashHolderModel(name: val, amount: _holders[index].amount);
+              _holders[index] = CashHolderModel(
+                name: val,
+                amount: _holders[index].amount,
+              );
               _saveCurrentHolders();
               setState(() {});
             },
@@ -1388,7 +2037,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
             ),
             onChanged: (val) {
               final amt = double.tryParse(val) ?? 0.0;
-              _holders[index] = CashHolderModel(name: _holders[index].name, amount: amt);
+              _holders[index] = CashHolderModel(
+                name: _holders[index].name,
+                amount: amt,
+              );
               _saveCurrentHolders();
               setState(() {});
             },
@@ -1396,7 +2048,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
         ),
         const SizedBox(width: 4),
         IconButton(
-          icon: const Icon(LucideIcons.trash2, color: AppColors.destructive, size: 16),
+          icon: const Icon(
+            LucideIcons.trash2,
+            color: AppColors.destructive,
+            size: 16,
+          ),
           onPressed: _holders.length <= 1 ? null : () => _removeHolder(index),
         ),
       ],
@@ -1425,7 +2081,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       SizedBox(height: 8),
                       Text(
                         'No saved snapshots yet.',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Text(
                         'Save your first daily cash count above.',
@@ -1446,7 +2105,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 itemBuilder: (context, i) {
                   final snap = _snapshots[i];
                   final diff = snap.difference;
-                  final dateStr = DateFormat('yyyy-MM-dd').format(snap.snapshotDate);
+                  final dateStr = DateFormat(
+                    'yyyy-MM-dd',
+                  ).format(snap.snapshotDate);
 
                   String badgeText = 'Matched';
                   Color chipBg = const Color(0xFFD1FAE5);
@@ -1476,11 +2137,17 @@ class _SummaryScreenState extends State<SummaryScreen> {
                               children: [
                                 Text(
                                   dateStr,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: chipBg,
                                     borderRadius: BorderRadius.circular(6),
@@ -1506,13 +2173,20 @@ class _SummaryScreenState extends State<SummaryScreen> {
                             const SizedBox(height: 2),
                             Text(
                               'Hand: ${_fmt(snap.cashInHand)} · App: ${_fmt(snap.cashInApp)}',
-                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
                             ),
                           ],
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(LucideIcons.trash2, size: 16, color: Colors.grey),
+                        icon: const Icon(
+                          LucideIcons.trash2,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
                         onPressed: () => _deleteSnapshot(snap.id),
                       ),
                     ],
@@ -1553,7 +2227,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: border.withAlpha(40),
                     borderRadius: BorderRadius.circular(10),
@@ -1578,7 +2255,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 IconButton(
                   constraints: const BoxConstraints(),
                   padding: EdgeInsets.zero,
-                  icon: const Icon(LucideIcons.info, size: 16, color: Colors.grey),
+                  icon: const Icon(
+                    LucideIcons.info,
+                    size: 16,
+                    color: Colors.grey,
+                  ),
                   onPressed: () {
                     _showFormulaDialog(
                       'Verification Difference',

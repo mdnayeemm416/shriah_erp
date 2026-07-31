@@ -353,10 +353,14 @@ class _DashboardTabState extends State<DashboardTab> {
 
         return Scaffold(
           backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            physics: const BouncingScrollPhysics(),
-            child: Column(
+          body: RefreshIndicator(
+            onRefresh: () async {
+              await context.read<WholesaleCubit>().loadAllData();
+            },
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 1. WHOLESALE VALUE CARD
@@ -918,6 +922,7 @@ class _DashboardTabState extends State<DashboardTab> {
               ],
             ),
           ),
+        ),
         );
       },
     );

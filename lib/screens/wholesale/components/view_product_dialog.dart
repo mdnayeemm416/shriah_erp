@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -10,6 +9,7 @@ import '../../../models/product_model.dart';
 import '../../../repositories/product_repository.dart';
 import 'add_product_dialog.dart';
 import 'adjust_stock_dialog.dart';
+import '../../common_widgets/smart_image_widget.dart';
 
 class ViewProductDialog extends StatelessWidget {
   final ProductModel product;
@@ -156,7 +156,6 @@ class ViewProductDialog extends StatelessWidget {
                           itemCount: images.length,
                           itemBuilder: (ctx, idx) {
                             final imgPath = images[idx];
-                            final isFile = File(imgPath).existsSync();
                             return Container(
                               width: 160,
                               margin: const EdgeInsets.only(right: 12),
@@ -165,9 +164,7 @@ class ViewProductDialog extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(color: borderColor),
                                 image: DecorationImage(
-                                  image: isFile
-                                      ? FileImage(File(imgPath)) as ImageProvider
-                                      : NetworkImage(imgPath),
+                                  image: getSmartImageProvider(imgPath),
                                   fit: BoxFit.cover,
                                 ),
                               ),

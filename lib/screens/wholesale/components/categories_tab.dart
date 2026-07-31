@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../blocs/wholesale/wholesale_state.dart';
 import '../../../models/wholesale_models.dart';
+import '../../common_widgets/smart_image_widget.dart';
 import 'add_category_bottom_sheet.dart';
 
 class CategoriesTab extends StatelessWidget {
@@ -17,6 +18,31 @@ class CategoriesTab extends StatelessWidget {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (context) => AddCategoryBottomSheet(categoryToEdit: categoryToEdit),
+    );
+  }
+
+  Widget _buildCategoryImage(String? imageUrl) {
+    const double size = 44.0;
+
+    Widget buildDefaultAvatar() {
+      return CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.teal.withValues(alpha: 0.1),
+        child: const Icon(
+          LucideIcons.tag,
+          color: Colors.teal,
+          size: 20,
+        ),
+      );
+    }
+
+    return SmartImageWidget(
+      imageUrl: imageUrl,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      borderRadius: BorderRadius.circular(10),
+      fallbackWidget: buildDefaultAvatar(),
     );
   }
 
@@ -62,14 +88,7 @@ class CategoriesTab extends StatelessWidget {
                               ),
                             ),
                             child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor:
-                                    Colors.teal.withValues(alpha: 0.1),
-                                child: const Icon(
-                                  LucideIcons.tag,
-                                  color: Colors.teal,
-                                ),
-                              ),
+                              leading: _buildCategoryImage(cat.imageUrl),
                               title: Text(
                                 cat.name,
                                 style: const TextStyle(
@@ -125,3 +144,4 @@ class CategoriesTab extends StatelessWidget {
     );
   }
 }
+

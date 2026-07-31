@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,13 +8,16 @@ import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../models/wholesale_models.dart';
 import '../../common_widgets/dashed_rounded_rect_painter.dart';
 import '../../common_widgets/dialog_helper_widgets.dart';
+import '../../common_widgets/smart_image_widget.dart';
 
 class AddCategoryBottomSheet extends StatefulWidget {
   final WholesaleCategoryModel? categoryToEdit;
+  final String? initialName;
 
   const AddCategoryBottomSheet({
     super.key,
     this.categoryToEdit,
+    this.initialName,
   });
 
   @override
@@ -36,13 +38,33 @@ class _AddCategoryBottomSheetState extends State<AddCategoryBottomSheet> {
   void initState() {
     super.initState();
     final cat = widget.categoryToEdit;
-    nameController = TextEditingController(text: cat?.name ?? '');
+    nameController = TextEditingController(text: cat?.name ?? widget.initialName ?? '');
     arController = TextEditingController(text: cat?.nameAr ?? '');
     bnController = TextEditingController(text: cat?.nameBn ?? '');
     sortController = TextEditingController(text: cat?.sortOrder.toString() ?? '0');
     isActive = cat?.isActive ?? true;
     selectedImagePath = cat?.imageUrl;
     smartSectionValue = cat?.smartSection ?? '— None —';
+  }
+
+  Widget _buildPreviewImage(String path, Color? labelColor) {
+    Widget buildError() {
+      return Center(
+        child: Icon(
+          LucideIcons.imageOff,
+          size: 40,
+          color: labelColor,
+        ),
+      );
+    }
+
+    return SmartImageWidget(
+      imageUrl: path,
+      width: double.infinity,
+      height: 160,
+      fit: BoxFit.cover,
+      fallbackWidget: buildError(),
+    );
   }
 
   @override
@@ -123,42 +145,12 @@ class _AddCategoryBottomSheetState extends State<AddCategoryBottomSheet> {
                   width: double.infinity,
                   height: 160,
                   alignment: Alignment.center,
-                  child: selectedImagePath != null
+                  child: selectedImagePath != null && selectedImagePath!.trim().isNotEmpty
                       ? Stack(
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(16),
-                              child: selectedImagePath!.startsWith('http')
-                                  ? Image.network(
-                                      selectedImagePath!,
-                                      width: double.infinity,
-                                      height: 160,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return Center(
-                                          child: Icon(
-                                            LucideIcons.imageOff,
-                                            size: 40,
-                                            color: labelColor,
-                                          ),
-                                        );
-                                      },
-                                    )
-                                  : Image.file(
-                                      File(selectedImagePath!),
-                                      width: double.infinity,
-                                      height: 160,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return Center(
-                                          child: Icon(
-                                            LucideIcons.imageOff,
-                                            size: 40,
-                                            color: labelColor,
-                                          ),
-                                        );
-                                      },
-                                    ),
+                              child: _buildPreviewImage(selectedImagePath!, labelColor),
                             ),
                             Positioned(
                               top: 8,
@@ -461,7 +453,7 @@ class _AddCategoryBottomSheetState extends State<AddCategoryBottomSheet> {
                         smartSection: smartSectionValue == '— None —' ? null : smartSectionValue,
                       );
                     }
-                    Navigator.pop(context);
+                    Navigator.pop(context, name);
                   }
                 },
                 child: const Text(

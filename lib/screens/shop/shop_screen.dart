@@ -4864,9 +4864,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
           child: RefreshIndicator(
             color: const Color(0xFF24B489),
             onRefresh: () async {
-              context.read<ShopBloc>().add(
-                LoadShopEntries(defaultShopId, workingDateTime),
-              );
+              context.read<ShopBloc>().add(LoadShops());
             },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -4903,8 +4901,34 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                         ),
                       ),
 
-                      // 3-Dots Menu Button
-                      Container(
+                      Row(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            child: IconButton(
+                              icon: Icon(
+                                LucideIcons.refreshCw,
+                                size: 18,
+                                color: isDark ? Colors.white : const Color(0xFF475569),
+                              ),
+                              tooltip: 'Refresh Shop Data',
+                              onPressed: () {
+                                context.read<ShopBloc>().add(LoadShops());
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Refreshing shop data from server...'), duration: Duration(seconds: 1)),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // 3-Dots Menu Button
+                          Container(
                         decoration: BoxDecoration(
                           color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
                           shape: BoxShape.circle,
@@ -5140,6 +5164,8 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                       ),
                     ],
                   ),
+                ],
+              ),
                   const SizedBox(height: 16),
 
                   // 2. Date Filter Pills Row (Horizontal Scroll)

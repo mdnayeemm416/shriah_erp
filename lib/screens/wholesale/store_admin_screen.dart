@@ -87,13 +87,7 @@ class _StoreAdminScreenState extends State<StoreAdminScreen>
 
   // ─── FAB per tab ───────────────────────────
   Widget? _buildFabForTab(int activeTab) {
-    if (activeTab == 1) {
-      return FloatingActionButton(
-        backgroundColor: const Color(0xFF0F9D58),
-        onPressed: () => _showTransactionDialog('sale'),
-        child: const Icon(Icons.add, color: Colors.white),
-      );
-    } else if (activeTab == 2) {
+    if (activeTab == 2) {
       return FloatingActionButton(
         backgroundColor: Colors.blue,
         onPressed: () => _showTransactionDialog('purchase'),
@@ -448,6 +442,20 @@ class _StoreAdminScreenState extends State<StoreAdminScreen>
             ),
           ),
 
+          IconButton(
+            icon: Icon(
+              LucideIcons.refreshCw,
+              size: 18,
+              color: isDark ? Colors.grey[400] : const Color(0xFF64748B),
+            ),
+            tooltip: 'Refresh Wholesale Data',
+            onPressed: () {
+              context.read<WholesaleCubit>().loadAllData();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Refreshing wholesale data from server...'), duration: Duration(seconds: 1)),
+              );
+            },
+          ),
           // More menu
           PopupMenuButton<String>(
             icon: Icon(

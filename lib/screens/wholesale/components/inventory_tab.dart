@@ -12,6 +12,8 @@ import 'view_product_dialog.dart';
 import 'bulk_adjust_stock_dialog.dart';
 import 'vyapar_import_dialog.dart';
 import 'print_price_list_dialog.dart';
+import '../../common_widgets/smart_image_widget.dart';
+import '../../../services/pdf_print_service.dart';
 
 class InventoryTab extends StatefulWidget {
   const InventoryTab({super.key});
@@ -487,16 +489,47 @@ class _InventoryTabState extends State<InventoryTab> {
                               ),
                             )
                           : ListView.separated(
-                              itemCount: filteredProducts.length,
+                                itemCount: filteredProducts.length,
                               physics: const BouncingScrollPhysics(),
                               separatorBuilder: (_, __) =>
                                   const SizedBox(height: 8),
                               itemBuilder: (context, index) {
-                                final product = filteredProducts[index];
-                                final isLow =
-                                    product.stock <= product.minStock;
-                                final isSelected = _selectedProductIds
-                                    .contains(product.id);
+                                 final product = filteredProducts[index];
+                                 final isLow =
+                                     product.stock <= product.minStock;
+                                 final isSelected = _selectedProductIds
+                                     .contains(product.id);
+
+                                 String? displayImageUrl;
+                                 if (product.images != null && product.images!.isNotEmpty) {
+                                   final firstImg = product.images!.firstWhere(
+                                     (img) => img.trim().isNotEmpty,
+                                     orElse: () => '',
+                                   );
+                                   if (firstImg.isNotEmpty) {
+                                     displayImageUrl = firstImg;
+                                   }
+                                 }
+                                 if ((displayImageUrl == null || displayImageUrl.isEmpty) &&
+                                     product.imageUrl != null &&
+                                     product.imageUrl!.trim().isNotEmpty) {
+                                   displayImageUrl = product.imageUrl;
+                                 }
+
+                                 final fallbackIcon = CircleAvatar(
+                                   radius: 20,
+                                   backgroundColor: (isLow
+                                           ? Colors.orange
+                                           : const Color(0xFF0F9D58))
+                                       .withValues(alpha: 0.1),
+                                   child: Icon(
+                                     LucideIcons.package,
+                                     color: isLow
+                                         ? Colors.orange
+                                         : const Color(0xFF0D9488),
+                                     size: 18,
+                                   ),
+                                 );
 
                                 return Card(
                                   elevation: 0,
@@ -559,20 +592,14 @@ class _InventoryTabState extends State<InventoryTab> {
                                              ),
                                              const SizedBox(width: 8),
                                            ],
-                                           CircleAvatar(
-                                             radius: 20,
-                                             backgroundColor: (isLow
-                                                     ? Colors.orange
-                                                     : const Color(0xFF0F9D58))
-                                                 .withValues(alpha: 0.1),
-                                             child: Icon(
-                                               LucideIcons.package,
-                                               color: isLow
-                                                   ? Colors.orange
-                                                   : const Color(0xFF0D9488),
-                                               size: 18,
-                                             ),
-                                           ),
+                                            SmartImageWidget(
+                                              imageUrl: displayImageUrl,
+                                              width: 40,
+                                              height: 40,
+                                              fit: BoxFit.cover,
+                                              borderRadius: BorderRadius.circular(20),
+                                              fallbackWidget: fallbackIcon,
+                                            ),
                                            const SizedBox(width: 12),
                                            Expanded(
                                              child: Column(
@@ -745,6 +772,33 @@ class _InventoryTabState extends State<InventoryTab> {
                                   ),
                                 ),
                                 const Spacer(),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF10B981),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    final selectedProds = state.products
+                                        .where((p) => _selectedProductIds.contains(p.id))
+                                        .toList();
+                                    if (selectedProds.isNotEmpty) {
+                                      await PdfPrintService.printProductList(
+                                        products: selectedProds,
+                                        title: 'Selected Products Inventory Report',
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(LucideIcons.printer, size: 16),
+                                  label: const Text(
+                                    'Print PDF',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.blue,

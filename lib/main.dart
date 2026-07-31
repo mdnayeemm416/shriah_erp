@@ -27,6 +27,7 @@ import 'repositories/daily_closing_repository.dart';
 import 'repositories/employee_expense_repository.dart';
 import 'repositories/price_compare_repository.dart';
 import 'repositories/wholesale_repository.dart';
+import 'repositories/opening_balance_repository.dart';
 import 'repositories/wholesale/wholesale_customer_repository.dart';
 import 'repositories/wholesale/wholesale_category_repository.dart';
 import 'repositories/wholesale/wholesale_sale_repository.dart';
@@ -65,6 +66,7 @@ void main() async {
   final employeeExpenseRepo = EmployeeExpenseRepository();
   final priceCompareRepo = PriceCompareRepository();
   final wholesaleRepo = WholesaleRepository();
+  final openingBalanceRepo = OpeningBalanceRepository();
 
   // 2. Initialize Hive schemas & API sync repositories
   await shopRepo.initialize();
@@ -76,6 +78,7 @@ void main() async {
   await employeeExpenseRepo.initialize();
   await priceCompareRepo.initialize();
   await wholesaleRepo.initialize();
+  await openingBalanceRepo.initialize();
 
   runApp(
     MultiRepositoryProvider(
@@ -100,6 +103,7 @@ void main() async {
           value: priceCompareRepo,
         ),
         RepositoryProvider<WholesaleRepository>.value(value: wholesaleRepo),
+        RepositoryProvider<OpeningBalanceRepository>.value(value: openingBalanceRepo),
         RepositoryProvider<WholesaleCustomerRepository>.value(value: wholesaleRepo.customerRepo),
         RepositoryProvider<WholesaleCategoryRepository>.value(value: wholesaleRepo.categoryRepo),
         RepositoryProvider<WholesaleSaleRepository>.value(value: wholesaleRepo.saleRepo),

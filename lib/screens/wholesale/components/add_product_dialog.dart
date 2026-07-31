@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +9,9 @@ import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../models/product_model.dart';
 import '../../../repositories/product_repository.dart';
 import '../../common_widgets/dashed_rounded_rect_painter.dart';
+import '../../common_widgets/smart_image_widget.dart';
+import 'category_searchable_dropdown.dart';
+import 'online_image_search_dialog.dart';
 
 class AddProductDialog extends StatefulWidget {
   final ProductModel? product;
@@ -62,6 +64,16 @@ class _AddProductDialogState extends State<AddProductDialog> {
 
     _selectedCategories = List<String>.from(p?.categoryIds ?? []);
 
+    final initialImages = <String>[];
+    if (p != null) {
+      if (p.images != null && p.images!.isNotEmpty) {
+        initialImages.addAll(p.images!);
+      } else if (p.imageUrl != null && p.imageUrl!.isNotEmpty) {
+        initialImages.add(p.imageUrl!);
+      }
+    }
+    _images = initialImages;
+
     _isVisibleOnWebsite = p?.isVisibleOnWebsite ?? true;
     _isFeatured = p?.isFeatured ?? false;
     _showStock = p?.showStock ?? true;
@@ -106,80 +118,77 @@ class _AddProductDialogState extends State<AddProductDialog> {
     }
   }
 
-  void _showFindImageDialog() {
-    final urlController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Add Image URL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: urlController,
-          decoration: const InputDecoration(
-            hintText: 'https://example.com/image.png',
-            labelText: 'Image URL',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final url = urlController.text.trim();
-              if (url.isNotEmpty) {
-                if (_images.length < 6) {
-                  setState(() {
-                    _images.add(url);
-                  });
-                }
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
+  Future<void> _showFindImageDialog() async {
+    if (_images.length >= 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Maximum 6 images allowed.')),
+      );
+      return;
+    }
 
-  void _showAddCategoryDialog() {
-    final catController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('New Category', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: catController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Category Name',
+    final queryName = nameController.text.trim().isNotEmpty
+        ? nameController.text.trim()
+        : (bnController.text.trim().isNotEmpty
+            ? bnController.text.trim()
+            : arController.text.trim());
+
+    if (queryName.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(LucideIcons.alertCircle, color: Colors.orange, size: 22),
+              SizedBox(width: 8),
+              Text('Product Name Required', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
           ),
+          content: const Text(
+            'Please write the product name first before searching for images online.',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF24B489),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('OK'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final name = catController.text.trim();
-              if (name.isNotEmpty) {
-                setState(() {
-                  if (!_selectedCategories.contains(name)) {
-                    _selectedCategories.add(name);
-                  }
-                });
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('Add'),
-          ),
-        ],
+      );
+      return;
+    }
+
+    final List<String>? selectedUrls = await showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => OnlineImageSearchDialog(
+        initialQuery: queryName,
+        maxAllowed: 6 - _images.length,
       ),
     );
+
+    if (selectedUrls != null && selectedUrls.isNotEmpty) {
+      setState(() {
+        for (final url in selectedUrls) {
+          if (_images.length < 6 && !_images.contains(url)) {
+            _images.add(url);
+          }
+        }
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added ${selectedUrls.length} image(s) to product.'),
+            backgroundColor: const Color(0xFF24B489),
+          ),
+        );
+      }
+    }
   }
 
   void _generateBarcode() {
@@ -200,10 +209,6 @@ class _AddProductDialogState extends State<AddProductDialog> {
     final hintColor = isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
     final borderColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
     const primaryColor = Color(0xFF24B489);
-
-    // Read stored categories dynamically from WholesaleState
-    final stateCategories = context.watch<WholesaleCubit>().state.categories.map((c) => c.name).toList();
-    final allCategories = <String>{...stateCategories, ..._selectedCategories}.toList();
 
     return Dialog(
       backgroundColor: bgColor,
@@ -283,7 +288,6 @@ class _AddProductDialogState extends State<AddProductDialog> {
                                 itemCount: _images.length,
                                 itemBuilder: (context, index) {
                                   final path = _images[index];
-                                  final isFile = File(path).existsSync();
                                   return Stack(
                                     children: [
                                       Container(
@@ -294,9 +298,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
                                           borderRadius: BorderRadius.circular(16),
                                           border: Border.all(color: borderColor),
                                           image: DecorationImage(
-                                            image: isFile
-                                                ? FileImage(File(path)) as ImageProvider
-                                                : NetworkImage(path),
+                                            image: getSmartImageProvider(path),
                                             fit: BoxFit.cover,
                                           ),
                                         ),
@@ -612,84 +614,16 @@ class _AddProductDialogState extends State<AddProductDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Section 8: Categories (select one or more)
-                      _buildSectionLabel('Categories (select one or more)', labelColor),
+                      // Section 8: Categories Dropdown
+                      _buildSectionLabel('Categories', labelColor),
                       const SizedBox(height: 6),
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(minHeight: 52),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: cardBg,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: borderColor),
-                        ),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            ...allCategories.map((cat) {
-                              final isSelected = _selectedCategories.contains(cat);
-                              return InkWell(
-                                onTap: () {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedCategories.remove(cat);
-                                    } else {
-                                      _selectedCategories.add(cat);
-                                    }
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(20),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 150),
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? primaryColor.withOpacity(0.12)
-                                        : (isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9)),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: isSelected ? primaryColor : borderColor,
-                                      width: isSelected ? 1.5 : 1,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    cat,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                      color: isSelected ? primaryColor : textColor,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }),
-                            InkWell(
-                              onTap: _showAddCategoryDialog,
-                              borderRadius: BorderRadius.circular(20),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.transparent,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: primaryColor),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(LucideIcons.plus, size: 14, color: primaryColor),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Add category',
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryColor),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      CategorySearchableDropdown(
+                        selectedCategories: _selectedCategories,
+                        onChanged: (newList) {
+                          setState(() {
+                            _selectedCategories = newList;
+                          });
+                        },
                       ),
                       const SizedBox(height: 16),
 
@@ -910,7 +844,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(20),
@@ -918,15 +852,20 @@ class _AddProductDialogState extends State<AddProductDialog> {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 15, color: textColor),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: textColor,
+            Icon(icon, size: 14, color: textColor),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
               ),
             ),
           ],
@@ -1018,7 +957,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
             scale: 0.7,
             child: Switch.adaptive(
               value: value,
-              activeColor: primaryColor,
+              activeTrackColor: primaryColor,
               onChanged: onChanged,
             ),
           ),

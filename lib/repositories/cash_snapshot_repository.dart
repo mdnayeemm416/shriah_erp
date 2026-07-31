@@ -21,11 +21,14 @@ class CashSnapshotRepository {
     final box = Hive.box<CashInHandSnapshotModel>(_snapshotsBoxName);
     try {
       final remoteList = await _apiClient.getList(ApiEndpoints.cashSnapshots);
-      if (remoteList != null && remoteList.isNotEmpty) {
+      if (remoteList != null) {
+        await box.clear();
         for (final item in remoteList) {
           if (item is Map<String, dynamic>) {
             final s = CashInHandSnapshotModel.fromJson(item);
-            await box.put(s.id, s);
+            if (s.id.isNotEmpty) {
+              await box.put(s.id, s);
+            }
           }
         }
       }
@@ -46,10 +49,27 @@ class CashSnapshotRepository {
   Future<void> deleteSnapshot(String id) async {
     final box = Hive.box<CashInHandSnapshotModel>(_snapshotsBoxName);
     await box.delete(id);
+    try {
+      await _apiClient.deleteBool(ApiEndpoints.cashSnapshotById(id));
+    } catch (_) {}
   }
 
   Future<List<CashHolderModel>> getCurrentHolders() async {
     final box = Hive.box<CashHolderModel>(_holdersBoxName);
+    try {
+      final remoteList = await _apiClient.getList(ApiEndpoints.cashHolders);
+      if (remoteList != null && remoteList.isNotEmpty) {
+        await box.clear();
+        for (int i = 0; i < remoteList.length; i++) {
+          final item = remoteList[i];
+          if (item is Map<String, dynamic>) {
+            final h = CashHolderModel.fromJson(item);
+            await box.put(i.toString(), h);
+          }
+        }
+      }
+    } catch (_) {}
+
     if (box.isEmpty) {
       return [CashHolderModel(name: '', amount: 0.0)];
     }
@@ -62,5 +82,9 @@ class CashSnapshotRepository {
     for (int i = 0; i < holders.length; i++) {
       await box.put(i.toString(), holders[i]);
     }
+    try {
+      final data = holders.map((h) => h.toJson()).toList();
+      await _apiClient.post(ApiEndpoints.cashHolders, data: data);
+    } catch (_) {}
   }
 }

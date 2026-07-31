@@ -395,7 +395,34 @@ class WholesaleCubit extends Cubit<WholesaleState> {
     }
   }
 
-  // --- Inventory Adjust ---
+  // --- Inventory & Product Operations ---
+  Future<void> saveProduct(ProductModel product) async {
+    try {
+      await productRepo.saveProduct(product);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> updateProductStock(String productId, double newStock) async {
+    try {
+      await productRepo.updateStock(productId, newStock);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> deleteProduct(String productId) async {
+    try {
+      await productRepo.deleteProduct(productId);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
   Future<void> adjustStock(String productId, double adjustment) async {
     try {
       final product = state.products.firstWhere((p) => p.id == productId);
