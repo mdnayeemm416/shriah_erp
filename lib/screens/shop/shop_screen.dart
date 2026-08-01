@@ -7,7 +7,13 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:dio/dio.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../common_widgets/smart_image_widget.dart';
 
 import '../../blocs/shop/shop_bloc.dart';
 import '../../blocs/shop/shop_event.dart';
@@ -69,6 +75,17 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
   List<CashierModel> _cashiers = [];
   List<ShopModel> _shops = [];
   List<ShopEntryModel> _allEntries = [];
+
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _initialized = true;
+      _triggerFilteredLoad();
+    }
+  }
 
   @override
   void initState() {
@@ -450,18 +467,6 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       }
     }
 
-    // Notes validation
-    if (type != 'sale' && _notesController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Notes description is required for purchases, expenses, and withdrawals.',
-          ),
-        ),
-      );
-      return;
-    }
-
     // OCR Mismatch validation
     if (type == 'purchase' && _ocrDetectedTotal != null && !_ocrMismatchAck) {
       final diff = (purchaseAmount - _ocrDetectedTotal!).abs();
@@ -486,7 +491,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       withdrawAmt: withdrawAmount,
     );
 
-    void saveCallback() {
+    Future<void> saveCallback() async {
       final totalSale = cashSale + bankSale + creditSale - dueReceivable;
       final diff = type == 'sale' ? (totalSale - posSale) : 0.0;
 
@@ -514,20 +519,73 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
         createdAt: _editingEntry?.createdAt ?? DateTime.now(),
       );
 
-      if (_editingEntry != null) {
-        context.read<ShopBloc>().add(UpdateEntry(updatedOrNew));
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Entry updated successfully.')),
-        );
-      } else {
-        context.read<ShopBloc>().add(AddEntry(updatedOrNew));
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Entry saved to database.')),
-        );
-      }
+      // Show a loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
 
-      Navigator.pop(context); // Close the sheet
-      _clearForm();
+      try {
+        final isUpdate = _editingEntry != null;
+        await context.read<ShopBloc>().shopRepository.saveEntry(
+          updatedOrNew,
+          isUpdate: isUpdate,
+        );
+
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog
+          Navigator.pop(context); // Close bottom sheet
+          _clearForm();
+
+          final bloc = context.read<ShopBloc>();
+          final currentState = bloc.state;
+          if (currentState is ShopLoaded) {
+            bloc.add(
+              LoadShops(
+                period: currentState.period,
+                startDate: currentState.startDate,
+                endDate: currentState.endDate,
+                date: currentState.date,
+              ),
+            );
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isUpdate
+                    ? 'Entry updated successfully.'
+                    : 'Entry saved successfully.',
+              ),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog ONLY
+          String errMsg = e.toString();
+          if (e is DioException) {
+            final resData = e.response?.data;
+            if (resData is Map && resData.containsKey('message')) {
+              errMsg = resData['message'];
+            } else if (e.response?.statusMessage != null) {
+              errMsg = e.response!.statusMessage!;
+            }
+          }
+          if (errMsg.startsWith('Exception: ')) {
+            errMsg = errMsg.substring('Exception: '.length);
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to save entry: $errMsg'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
 
     if (duplicate != null) {
@@ -797,7 +855,8 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                         ),
                       ),
 
-                      if (entry.attachmentUrl != null) ...[
+                      if (entry.attachmentUrl != null &&
+                          entry.attachmentUrl!.isNotEmpty) ...[
                         const SizedBox(height: 20),
                         const Row(
                           children: [
@@ -819,39 +878,96 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: AppColors.primary.withValues(alpha: 0.3),
-                            ),
-                            color: AppColors.primary.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                LucideIcons.image,
-                                size: 16,
-                                color: AppColors.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  entry.attachmentUrl!,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.bold,
+                        Builder(
+                          builder: (context) {
+                            final url = entry.attachmentUrl!;
+                            final isImage = _isImageAttachment(url);
+                            return InkWell(
+                              onTap: () {
+                                if (isImage) {
+                                  _showFullScreenImage(context, url);
+                                } else {
+                                  _openAttachment(url);
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.3,
+                                    ),
                                   ),
-                                  overflow: TextOverflow.ellipsis,
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.05,
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          isImage
+                                              ? LucideIcons.image
+                                              : LucideIcons.fileText,
+                                          size: 16,
+                                          color: AppColors.primary,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            url
+                                                .split(Platform.pathSeparator)
+                                                .last,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.primary,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Icon(
+                                          LucideIcons.eye,
+                                          size: 14,
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.7,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (isImage) ...[
+                                      const SizedBox(height: 10),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: SizedBox(
+                                          height: 150,
+                                          width: double.infinity,
+                                          child: SmartImageWidget(
+                                            imageUrl: url,
+                                            fit: BoxFit.cover,
+                                            fallbackWidget: Container(
+                                              color: Colors.grey.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                              child: const Icon(
+                                                LucideIcons.imageOff,
+                                                size: 28,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
                       ],
 
@@ -1158,13 +1274,21 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return Dialog(
-              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(28),
               ),
-              backgroundColor: isDark ? AppColors.cardDark : const Color(0xFFFAFAFA),
+              backgroundColor: isDark
+                  ? AppColors.cardDark
+                  : const Color(0xFFFAFAFA),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
+                constraints: const BoxConstraints(
+                  maxWidth: 440,
+                  maxHeight: 680,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
                   child: Column(
@@ -1180,7 +1304,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
-                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
                             ),
                           ),
                           InkWell(
@@ -1190,7 +1316,10 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: const Color(0xFF2DD4BF), width: 1.5),
+                                border: Border.all(
+                                  color: const Color(0xFF2DD4BF),
+                                  width: 1.5,
+                                ),
                               ),
                               child: const Icon(
                                 LucideIcons.x,
@@ -1210,7 +1339,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                          color: isDark
+                              ? Colors.grey.shade300
+                              : const Color(0xFF334155),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -1218,27 +1349,40 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                         controller: nameController,
                         style: TextStyle(
                           fontSize: 14,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
                         ),
                         decoration: InputDecoration(
                           hintText: 'e.g. Main branch',
                           hintStyle: TextStyle(
-                            color: isDark ? Colors.grey.shade500 : const Color(0xFF94A3B8),
+                            color: isDark
+                                ? Colors.grey.shade500
+                                : const Color(0xFF94A3B8),
                             fontSize: 13,
                           ),
-                          fillColor: isDark ? AppColors.inputDark : Colors.white,
+                          fillColor: isDark
+                              ? AppColors.inputDark
+                              : Colors.white,
                           filled: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                         ),
@@ -1251,31 +1395,46 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                          color: isDark
+                              ? Colors.grey.shade300
+                              : const Color(0xFF334155),
                         ),
                       ),
                       const SizedBox(height: 6),
                       TextField(
                         controller: cashController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         style: TextStyle(
                           fontSize: 14,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
                         ),
                         decoration: InputDecoration(
-                          fillColor: isDark ? AppColors.inputDark : Colors.white,
+                          fillColor: isDark
+                              ? AppColors.inputDark
+                              : Colors.white,
                           filled: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                         ),
@@ -1288,42 +1447,61 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                          color: isDark
+                              ? Colors.grey.shade300
+                              : const Color(0xFF334155),
                         ),
                       ),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
                         initialValue: shopType,
                         decoration: InputDecoration(
-                          fillColor: isDark ? AppColors.inputDark : Colors.white,
+                          fillColor: isDark
+                              ? AppColors.inputDark
+                              : Colors.white,
                           filled: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                         ),
                         icon: Icon(
                           LucideIcons.chevronDown,
                           size: 18,
-                          color: isDark ? Colors.white : const Color(0xFF334155),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF334155),
                         ),
                         items: const [
                           DropdownMenuItem(
                             value: 'full_erp',
-                            child: Text('Full ERP', style: TextStyle(fontSize: 13)),
+                            child: Text(
+                              'Full ERP',
+                              style: TextStyle(fontSize: 13),
+                            ),
                           ),
                           DropdownMenuItem(
                             value: 'simple_cash',
-                            child: Text('Simple Cash', style: TextStyle(fontSize: 13)),
+                            child: Text(
+                              'Simple Cash',
+                              style: TextStyle(fontSize: 13),
+                            ),
                           ),
                         ],
                         onChanged: (val) {
@@ -1347,7 +1525,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                           onPressed: () async {
                             final name = nameController.text.trim();
                             if (name.isEmpty) return;
-                            final cashVal = double.tryParse(cashController.text.trim()) ?? 0.0;
+                            final cashVal =
+                                double.tryParse(cashController.text.trim()) ??
+                                0.0;
                             final repo = ShopRepository();
                             final newShop = ShopModel(
                               id: 'shop-${DateTime.now().millisecondsSinceEpoch}',
@@ -1358,7 +1538,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                             );
                             await repo.saveShop(newShop);
                             if (!mounted) return;
-                            context.read<ShopBloc>().add(LoadShops());
+                            _triggerFilteredLoad();
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -1391,7 +1571,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                             color: isDark ? AppColors.inputDark : Colors.white,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                           child: _shops.isEmpty
@@ -1404,24 +1586,33 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               : ListView.separated(
                                   padding: const EdgeInsets.all(12),
                                   itemCount: _shops.length,
-                                  separatorBuilder: (context, index) => const Divider(
-                                    height: 1,
-                                    color: Color(0xFFF1F5F9),
-                                  ),
+                                  separatorBuilder: (context, index) =>
+                                      const Divider(
+                                        height: 1,
+                                        color: Color(0xFFF1F5F9),
+                                      ),
                                   itemBuilder: (context, idx) {
                                     final s = _shops[idx];
-                                    final isSimple = s.shopType == 'simple_cash';
-                                    final openingVal = s.openingCash ?? (isSimple ? 3000.0 : 5000.0);
-                                    final formattedCash = NumberFormat('#,##0.00').format(openingVal);
+                                    final isSimple =
+                                        s.shopType == 'simple_cash';
+                                    final openingVal =
+                                        s.openingCash ??
+                                        (isSimple ? 3000.0 : 5000.0);
+                                    final formattedCash = NumberFormat(
+                                      '#,##0.00',
+                                    ).format(openingVal);
 
                                     return Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
                                       child: Row(
                                         children: [
                                           // Left info
                                           Expanded(
                                             child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
                                                 Row(
                                                   children: [
@@ -1429,26 +1620,46 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                                       child: Text(
                                                         s.name,
                                                         style: TextStyle(
-                                                          fontWeight: FontWeight.bold,
+                                                          fontWeight:
+                                                              FontWeight.bold,
                                                           fontSize: 14,
-                                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                                          color: isDark
+                                                              ? Colors.white
+                                                              : const Color(
+                                                                  0xFF0F172A,
+                                                                ),
                                                         ),
-                                                        overflow: TextOverflow.ellipsis,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
                                                       ),
                                                     ),
                                                     const SizedBox(width: 6),
                                                     Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 2,
+                                                          ),
                                                       decoration: BoxDecoration(
-                                                        color: const Color(0xFFCCFBF1),
-                                                        borderRadius: BorderRadius.circular(10),
+                                                        color: const Color(
+                                                          0xFFCCFBF1,
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              10,
+                                                            ),
                                                       ),
                                                       child: Text(
-                                                        isSimple ? 'CASH' : 'ERP',
+                                                        isSimple
+                                                            ? 'CASH'
+                                                            : 'ERP',
                                                         style: const TextStyle(
-                                                          color: Color(0xFF0D9488),
+                                                          color: Color(
+                                                            0xFF0D9488,
+                                                          ),
                                                           fontSize: 9,
-                                                          fontWeight: FontWeight.w800,
+                                                          fontWeight:
+                                                              FontWeight.w800,
                                                         ),
                                                       ),
                                                     ),
@@ -1459,7 +1670,11 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                                   'Opening · SAR  $formattedCash',
                                                   style: TextStyle(
                                                     fontSize: 12,
-                                                    color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                                    color: isDark
+                                                        ? Colors.grey.shade400
+                                                        : const Color(
+                                                            0xFF64748B,
+                                                          ),
                                                   ),
                                                 ),
                                               ],
@@ -1469,23 +1684,36 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
 
                                           // Dropdown selector
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 0,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: isDark ? AppColors.cardDark : const Color(0xFFF8FAFC),
-                                              borderRadius: BorderRadius.circular(16),
+                                              color: isDark
+                                                  ? AppColors.cardDark
+                                                  : const Color(0xFFF8FAFC),
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
                                               border: Border.all(
-                                                color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                                color: isDark
+                                                    ? AppColors.borderDark
+                                                    : const Color(0xFFE2E8F0),
                                               ),
                                             ),
                                             child: DropdownButtonHideUnderline(
                                               child: DropdownButton<String>(
                                                 value: s.shopType ?? 'full_erp',
                                                 isDense: true,
-                                                icon: const Icon(LucideIcons.chevronDown, size: 14),
+                                                icon: const Icon(
+                                                  LucideIcons.chevronDown,
+                                                  size: 14,
+                                                ),
                                                 style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w500,
-                                                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : const Color(0xFF1E293B),
                                                 ),
                                                 items: const [
                                                   DropdownMenuItem(
@@ -1498,11 +1726,17 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                                   ),
                                                 ],
                                                 onChanged: (newType) async {
-                                                  if (newType != null && newType != s.shopType) {
-                                                    final repo = ShopRepository();
-                                                    await repo.saveShop(s.copyWith(shopType: newType));
+                                                  if (newType != null &&
+                                                      newType != s.shopType) {
+                                                    final repo =
+                                                        ShopRepository();
+                                                    await repo.saveShop(
+                                                      s.copyWith(
+                                                        shopType: newType,
+                                                      ),
+                                                    );
                                                     if (!mounted) return;
-                                                    context.read<ShopBloc>().add(LoadShops());
+                                                    _triggerFilteredLoad();
                                                     setDialogState(() {});
                                                   }
                                                 },
@@ -1524,15 +1758,15 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                                 s.copyWith(isDeleted: true),
                                               );
                                               if (!mounted) return;
-                                              context.read<ShopBloc>().add(
-                                                LoadShops(),
-                                              );
+                                              _triggerFilteredLoad();
                                               Navigator.pop(context);
                                               ScaffoldMessenger.of(
                                                 context,
                                               ).showSnackBar(
                                                 const SnackBar(
-                                                  content: Text('Shop deleted.'),
+                                                  content: Text(
+                                                    'Shop deleted.',
+                                                  ),
                                                 ),
                                               );
                                             },
@@ -1596,13 +1830,21 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                     .toList();
 
                 return Dialog(
-                  insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                  insetPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 24,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(28),
                   ),
-                  backgroundColor: isDark ? AppColors.cardDark : const Color(0xFFFAFAFA),
+                  backgroundColor: isDark
+                      ? AppColors.cardDark
+                      : const Color(0xFFFAFAFA),
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
+                    constraints: const BoxConstraints(
+                      maxWidth: 440,
+                      maxHeight: 680,
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(20.0),
                       child: Column(
@@ -1618,14 +1860,18 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 18,
-                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF0F172A),
                                 ),
                               ),
                               IconButton(
                                 icon: Icon(
                                   LucideIcons.x,
                                   size: 18,
-                                  color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                  color: isDark
+                                      ? Colors.grey.shade400
+                                      : const Color(0xFF64748B),
                                 ),
                                 onPressed: () => Navigator.pop(context),
                               ),
@@ -1638,10 +1884,14 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                             child: Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: isDark ? AppColors.inputDark : Colors.white,
+                                color: isDark
+                                    ? AppColors.inputDark
+                                    : Colors.white,
                                 borderRadius: BorderRadius.circular(24),
                                 border: Border.all(
-                                  color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                  color: isDark
+                                      ? AppColors.borderDark
+                                      : const Color(0xFFE2E8F0),
                                 ),
                               ),
                               child: Column(
@@ -1649,7 +1899,8 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                 children: [
                                   // Inner Header: Cashiers + Add cashier button
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Row(
                                         children: [
@@ -1664,19 +1915,28 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 16,
-                                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : const Color(0xFF0F172A),
                                             ),
                                           ),
                                         ],
                                       ),
                                       ElevatedButton.icon(
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFF24B489),
+                                          backgroundColor: const Color(
+                                            0xFF24B489,
+                                          ),
                                           foregroundColor: Colors.white,
                                           elevation: 0,
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 8,
+                                          ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(20),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
                                           ),
                                         ),
                                         onPressed: () {
@@ -1687,7 +1947,10 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                             },
                                           );
                                         },
-                                        icon: const Icon(LucideIcons.plus, size: 16),
+                                        icon: const Icon(
+                                          LucideIcons.plus,
+                                          size: 16,
+                                        ),
                                         label: const Text(
                                           'Add cashier',
                                           style: TextStyle(
@@ -1706,32 +1969,48 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                     onChanged: (_) => setDialogState(() {}),
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF0F172A),
                                     ),
                                     decoration: InputDecoration(
                                       hintText: 'Search shops...',
                                       hintStyle: TextStyle(
-                                        color: isDark ? Colors.grey.shade500 : const Color(0xFF94A3B8),
+                                        color: isDark
+                                            ? Colors.grey.shade500
+                                            : const Color(0xFF94A3B8),
                                         fontSize: 13,
                                       ),
                                       prefixIcon: Icon(
                                         LucideIcons.search,
                                         size: 16,
-                                        color: isDark ? Colors.grey.shade400 : const Color(0xFF94A3B8),
+                                        color: isDark
+                                            ? Colors.grey.shade400
+                                            : const Color(0xFF94A3B8),
                                       ),
-                                      fillColor: isDark ? AppColors.cardDark : const Color(0xFFFAFAFA),
+                                      fillColor: isDark
+                                          ? AppColors.cardDark
+                                          : const Color(0xFFFAFAFA),
                                       filled: true,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 10,
+                                          ),
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(16),
                                         borderSide: BorderSide(
-                                          color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                          color: isDark
+                                              ? AppColors.borderDark
+                                              : const Color(0xFFE2E8F0),
                                         ),
                                       ),
                                       enabledBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(16),
                                         borderSide: BorderSide(
-                                          color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                          color: isDark
+                                              ? AppColors.borderDark
+                                              : const Color(0xFFE2E8F0),
                                         ),
                                       ),
                                     ),
@@ -1743,92 +2022,177 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(18),
                                       border: Border.all(
-                                        color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                        color: isDark
+                                            ? AppColors.borderDark
+                                            : const Color(0xFFE2E8F0),
                                       ),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Padding(
-                                          padding: const EdgeInsets.only(left: 12, top: 10, bottom: 6),
+                                          padding: const EdgeInsets.only(
+                                            left: 12,
+                                            top: 10,
+                                            bottom: 6,
+                                          ),
                                           child: Text(
                                             'SHOPS',
                                             style: TextStyle(
                                               fontSize: 11,
                                               fontWeight: FontWeight.w700,
-                                              color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                              color: isDark
+                                                  ? Colors.grey.shade400
+                                                  : const Color(0xFF64748B),
                                               letterSpacing: 0.6,
                                             ),
                                           ),
                                         ),
                                         ConstrainedBox(
-                                          constraints: const BoxConstraints(maxHeight: 140),
+                                          constraints: const BoxConstraints(
+                                            maxHeight: 140,
+                                          ),
                                           child: filteredShops.isEmpty
                                               ? const Padding(
                                                   padding: EdgeInsets.all(12.0),
-                                                  child: Text('No shops found.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                                  child: Text(
+                                                    'No shops found.',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey,
+                                                    ),
+                                                  ),
                                                 )
                                               : ListView.builder(
                                                   shrinkWrap: true,
                                                   padding: EdgeInsets.zero,
-                                                  itemCount: filteredShops.length,
+                                                  itemCount:
+                                                      filteredShops.length,
                                                   itemBuilder: (context, idx) {
-                                                    final shop = filteredShops[idx];
-                                                    final isSelected = shop.id == selectedShopId;
-                                                    final count = currentCashiers
-                                                        .where((c) => c.shopId == shop.id && !c.isDeleted)
-                                                        .length;
+                                                    final shop =
+                                                        filteredShops[idx];
+                                                    final isSelected =
+                                                        shop.id ==
+                                                        selectedShopId;
+                                                    final count =
+                                                        currentCashiers
+                                                            .where(
+                                                              (c) =>
+                                                                  c.shopId ==
+                                                                      shop.id &&
+                                                                  !c.isDeleted,
+                                                            )
+                                                            .length;
 
                                                     return InkWell(
                                                       onTap: () {
                                                         setDialogState(() {
-                                                          selectedShopId = shop.id;
+                                                          selectedShopId =
+                                                              shop.id;
                                                         });
                                                       },
                                                       child: Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 12,
+                                                              vertical: 10,
+                                                            ),
                                                         decoration: BoxDecoration(
                                                           color: isSelected
-                                                              ? (isDark ? AppColors.primary.withValues(alpha: 0.2) : const Color(0xFFE6F4F1))
-                                                              : Colors.transparent,
+                                                              ? (isDark
+                                                                    ? AppColors
+                                                                          .primary
+                                                                          .withValues(
+                                                                            alpha:
+                                                                                0.2,
+                                                                          )
+                                                                    : const Color(
+                                                                        0xFFE6F4F1,
+                                                                      ))
+                                                              : Colors
+                                                                    .transparent,
                                                         ),
                                                         child: Row(
                                                           children: [
                                                             Container(
-                                                              padding: const EdgeInsets.all(6),
+                                                              padding:
+                                                                  const EdgeInsets.all(
+                                                                    6,
+                                                                  ),
                                                               decoration: BoxDecoration(
-                                                                color: const Color(0xFFCCFBF1),
-                                                                borderRadius: BorderRadius.circular(10),
+                                                                color:
+                                                                    const Color(
+                                                                      0xFFCCFBF1,
+                                                                    ),
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      10,
+                                                                    ),
                                                               ),
                                                               child: const Icon(
-                                                                LucideIcons.store,
+                                                                LucideIcons
+                                                                    .store,
                                                                 size: 14,
-                                                                color: Color(0xFF0D9488),
+                                                                color: Color(
+                                                                  0xFF0D9488,
+                                                                ),
                                                               ),
                                                             ),
-                                                            const SizedBox(width: 10),
+                                                            const SizedBox(
+                                                              width: 10,
+                                                            ),
                                                             Expanded(
                                                               child: Text(
                                                                 shop.name,
                                                                 style: TextStyle(
                                                                   fontSize: 13,
-                                                                  fontWeight: FontWeight.w600,
-                                                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  color: isDark
+                                                                      ? Colors
+                                                                            .white
+                                                                      : const Color(
+                                                                          0xFF0F172A,
+                                                                        ),
                                                                 ),
                                                               ),
                                                             ),
                                                             Container(
-                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    horizontal:
+                                                                        8,
+                                                                    vertical: 2,
+                                                                  ),
                                                               decoration: BoxDecoration(
-                                                                color: isDark ? Colors.grey.shade800 : const Color(0xFFF1F5F9),
-                                                                borderRadius: BorderRadius.circular(10),
+                                                                color: isDark
+                                                                    ? Colors
+                                                                          .grey
+                                                                          .shade800
+                                                                    : const Color(
+                                                                        0xFFF1F5F9,
+                                                                      ),
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      10,
+                                                                    ),
                                                               ),
                                                               child: Text(
                                                                 '$count',
                                                                 style: TextStyle(
                                                                   fontSize: 11,
-                                                                  fontWeight: FontWeight.bold,
-                                                                  color: isDark ? Colors.grey.shade300 : const Color(0xFF64748B),
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  color: isDark
+                                                                      ? Colors
+                                                                            .grey
+                                                                            .shade300
+                                                                      : const Color(
+                                                                          0xFF64748B,
+                                                                        ),
                                                                 ),
                                                               ),
                                                             ),
@@ -1851,20 +2215,29 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(18),
                                         border: Border.all(
-                                          color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                                          color: isDark
+                                              ? AppColors.borderDark
+                                              : const Color(0xFFE2E8F0),
                                         ),
                                       ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Padding(
-                                            padding: const EdgeInsets.only(left: 12, top: 10, bottom: 6),
+                                            padding: const EdgeInsets.only(
+                                              left: 12,
+                                              top: 10,
+                                              bottom: 6,
+                                            ),
                                             child: Text(
                                               'CASHIERS OF ${selectedShop.name.toUpperCase()}',
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w700,
-                                                color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                                color: isDark
+                                                    ? Colors.grey.shade400
+                                                    : const Color(0xFF64748B),
                                                 letterSpacing: 0.6,
                                               ),
                                             ),
@@ -1877,50 +2250,77 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                                       'No cashiers yet.',
                                                       style: TextStyle(
                                                         fontSize: 13,
-                                                        color: Color(0xFF64748B),
+                                                        color: Color(
+                                                          0xFF64748B,
+                                                        ),
                                                       ),
                                                     ),
                                                   )
                                                 : ListView.separated(
-                                                    padding: const EdgeInsets.all(8),
-                                                    itemCount: activeCashiers.length,
-                                                    separatorBuilder: (context, idx) => const Divider(height: 1),
+                                                    padding:
+                                                        const EdgeInsets.all(8),
+                                                    itemCount:
+                                                        activeCashiers.length,
+                                                    separatorBuilder:
+                                                        (context, idx) =>
+                                                            const Divider(
+                                                              height: 1,
+                                                            ),
                                                     itemBuilder: (context, idx) {
-                                                      final cashier = activeCashiers[idx];
+                                                      final cashier =
+                                                          activeCashiers[idx];
                                                       return ListTile(
                                                         dense: true,
-                                                        leading: const CircleAvatar(
-                                                          radius: 12,
-                                                          backgroundColor: Color(0xFF24B489),
-                                                          child: Icon(
-                                                            LucideIcons.user,
-                                                            size: 12,
-                                                            color: Colors.white,
-                                                          ),
-                                                        ),
+                                                        leading:
+                                                            const CircleAvatar(
+                                                              radius: 12,
+                                                              backgroundColor:
+                                                                  Color(
+                                                                    0xFF24B489,
+                                                                  ),
+                                                              child: Icon(
+                                                                LucideIcons
+                                                                    .user,
+                                                                size: 12,
+                                                                color: Colors
+                                                                    .white,
+                                                              ),
+                                                            ),
                                                         title: Text(
                                                           cashier.name,
                                                           style: TextStyle(
-                                                            fontWeight: FontWeight.bold,
+                                                            fontWeight:
+                                                                FontWeight.bold,
                                                             fontSize: 13,
-                                                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                                            color: isDark
+                                                                ? Colors.white
+                                                                : const Color(
+                                                                    0xFF0F172A,
+                                                                  ),
                                                           ),
                                                         ),
                                                         trailing: IconButton(
                                                           icon: const Icon(
                                                             LucideIcons.trash2,
                                                             size: 16,
-                                                            color: Color(0xFF94A3B8),
+                                                            color: Color(
+                                                              0xFF94A3B8,
+                                                            ),
                                                           ),
                                                           onPressed: () async {
-                                                            final repo = ShopRepository();
-                                                            final shopBloc = context.read<ShopBloc>();
+                                                            final repo =
+                                                                ShopRepository();
                                                             await repo.saveCashier(
-                                                              cashier.copyWith(isDeleted: true),
+                                                              cashier.copyWith(
+                                                                isDeleted: true,
+                                                              ),
                                                             );
-                                                            if (!mounted) return;
-                                                            shopBloc.add(LoadShops());
-                                                            setDialogState(() {});
+                                                            if (!mounted)
+                                                              return;
+                                                            _triggerFilteredLoad();
+                                                            setDialogState(
+                                                              () {},
+                                                            );
                                                           },
                                                         ),
                                                       );
@@ -1948,7 +2348,10 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _showAddCashierDialog(String preselectedShopId, {required VoidCallback onCashierAdded}) {
+  void _showAddCashierDialog(
+    String preselectedShopId, {
+    required VoidCallback onCashierAdded,
+  }) {
     final nameController = TextEditingController();
     String selectedShopId = _shops.any((s) => s.id == preselectedShopId)
         ? preselectedShopId
@@ -1982,14 +2385,18 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
-                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
                             ),
                           ),
                           IconButton(
                             icon: Icon(
                               LucideIcons.x,
                               size: 18,
-                              color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                              color: isDark
+                                  ? Colors.grey.shade400
+                                  : const Color(0xFF64748B),
                             ),
                             onPressed: () => Navigator.pop(context),
                           ),
@@ -2003,7 +2410,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                          color: isDark
+                              ? Colors.grey.shade300
+                              : const Color(0xFF334155),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -2011,27 +2420,40 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                         controller: nameController,
                         style: TextStyle(
                           fontSize: 14,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
                         ),
                         decoration: InputDecoration(
                           hintText: 'e.g. Anwer',
                           hintStyle: TextStyle(
-                            color: isDark ? Colors.grey.shade500 : const Color(0xFF94A3B8),
+                            color: isDark
+                                ? Colors.grey.shade500
+                                : const Color(0xFF94A3B8),
                             fontSize: 13,
                           ),
-                          fillColor: isDark ? AppColors.inputDark : const Color(0xFFFAFAFA),
+                          fillColor: isDark
+                              ? AppColors.inputDark
+                              : const Color(0xFFFAFAFA),
                           filled: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
@@ -2051,42 +2473,61 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                          color: isDark
+                              ? Colors.grey.shade300
+                              : const Color(0xFF334155),
                         ),
                       ),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
-                        initialValue: selectedShopId.isNotEmpty ? selectedShopId : null,
+                        initialValue: selectedShopId.isNotEmpty
+                            ? selectedShopId
+                            : null,
                         decoration: InputDecoration(
-                          fillColor: isDark ? AppColors.inputDark : const Color(0xFFFAFAFA),
+                          fillColor: isDark
+                              ? AppColors.inputDark
+                              : const Color(0xFFFAFAFA),
                           filled: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                         ),
                         icon: Icon(
                           LucideIcons.chevronDown,
                           size: 18,
-                          color: isDark ? Colors.white : const Color(0xFF64748B),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF64748B),
                         ),
                         items: _shops.map((s) {
                           return DropdownMenuItem<String>(
                             value: s.id,
-                            child: Text(s.name, style: const TextStyle(fontSize: 13)),
+                            child: Text(
+                              s.name,
+                              style: const TextStyle(fontSize: 13),
+                            ),
                           );
                         }).toList(),
                         onChanged: (val) {
-                          if (val != null) setDialogState(() => selectedShopId = val);
+                          if (val != null)
+                            setDialogState(() => selectedShopId = val);
                         },
                       ),
                       const SizedBox(height: 20),
@@ -2112,10 +2553,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               name: name,
                               shopId: selectedShopId,
                             );
-                            final shopBloc = context.read<ShopBloc>();
                             await repo.saveCashier(newCashier);
                             if (!context.mounted) return;
-                            shopBloc.add(LoadShops());
+                            _triggerFilteredLoad();
                             onCashierAdded();
                             Navigator.pop(context);
                           },
@@ -2138,8 +2578,6 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       },
     );
   }
-
-
 
   void _showImportSales(String currentShopId) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -2224,20 +2662,28 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                   InkWell(
                                     onTap: () async {
                                       try {
-                                        final result = await FilePicker.pickFiles(
-                                          type: FileType.custom,
-                                          allowedExtensions: ['csv'],
-                                          withData: true,
-                                        );
-                                        if (result != null && result.files.isNotEmpty) {
+                                        final result =
+                                            await FilePicker.pickFiles(
+                                              type: FileType.custom,
+                                              allowedExtensions: ['csv'],
+                                              withData: true,
+                                            );
+                                        if (result != null &&
+                                            result.files.isNotEmpty) {
                                           setImportState(() {
                                             pickedFile = result.files.first;
                                           });
                                         }
                                       } catch (e) {
                                         if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Error picking file: $e')),
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Error picking file: $e',
+                                              ),
+                                            ),
                                           );
                                         }
                                       }
@@ -2333,17 +2779,21 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                               FormData formData;
                                               if (pickedFile!.path != null) {
                                                 formData = FormData.fromMap({
-                                                  'file': await MultipartFile.fromFile(
-                                                    pickedFile!.path!,
-                                                    filename: pickedFile!.name,
-                                                  ),
+                                                  'file':
+                                                      await MultipartFile.fromFile(
+                                                        pickedFile!.path!,
+                                                        filename:
+                                                            pickedFile!.name,
+                                                      ),
                                                 });
                                               } else {
                                                 formData = FormData.fromMap({
-                                                  'file': MultipartFile.fromBytes(
-                                                    pickedFile!.bytes!,
-                                                    filename: pickedFile!.name,
-                                                  ),
+                                                  'file':
+                                                      MultipartFile.fromBytes(
+                                                        pickedFile!.bytes!,
+                                                        filename:
+                                                            pickedFile!.name,
+                                                      ),
                                                 });
                                               }
 
@@ -2351,10 +2801,12 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                                 progress = 0.4;
                                               });
 
-                                              final response = await ApiClient().dio.post(
-                                                ApiEndpoints.shopImportCsv,
-                                                data: formData,
-                                              );
+                                              final response = await ApiClient()
+                                                  .dio
+                                                  .post(
+                                                    ApiEndpoints.shopImportCsv,
+                                                    data: formData,
+                                                  );
 
                                               setImportState(() {
                                                 progress = 0.8;
@@ -2362,14 +2814,18 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
 
                                               if (response.statusCode == 200 &&
                                                   response.data is Map) {
-                                                final body = Map<String, dynamic>.from(
-                                                    response.data as Map);
+                                                final body =
+                                                    Map<String, dynamic>.from(
+                                                      response.data as Map,
+                                                    );
                                                 if (body['success'] == true) {
-                                                  final stats = Map<String, dynamic>.from(
-                                                      body['data'] as Map);
+                                                  final stats =
+                                                      Map<String, dynamic>.from(
+                                                        body['data'] as Map,
+                                                      );
 
                                                   // Refresh local list via shop bloc
-                                                  context.read<ShopBloc>().add(LoadShops());
+                                                  _triggerFilteredLoad();
 
                                                   setImportState(() {
                                                     stage = 'done';
@@ -2379,17 +2835,25 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                                   return;
                                                 } else {
                                                   throw Exception(
-                                                      body['message'] ?? 'Import failed');
+                                                    body['message'] ??
+                                                        'Import failed',
+                                                  );
                                                 }
                                               } else {
                                                 throw Exception(
-                                                    'Server returned status ${response.statusCode}');
+                                                  'Server returned status ${response.statusCode}',
+                                                );
                                               }
                                             } catch (e) {
                                               if (context.mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
                                                   SnackBar(
-                                                      content: Text('Import failed: ${e.toString()}')),
+                                                    content: Text(
+                                                      'Import failed: ${e.toString()}',
+                                                    ),
+                                                  ),
                                                 );
                                               }
                                               setImportState(() {
@@ -2433,102 +2897,112 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                               ),
                             )
                           : stage == 'importing'
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const CircularProgressIndicator(
-                                      color: AppColors.primary,
-                                    ),
-                                    const SizedBox(height: 24),
-                                    Text(
-                                      'Processing imports... ${(progress * 100).toInt()}%',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
+                                const SizedBox(height: 24),
+                                Text(
+                                  'Processing imports... ${(progress * 100).toInt()}%',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 40,
+                                  ),
+                                  child: LinearProgressIndicator(
+                                    value: progress,
+                                    minHeight: 6,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : SingleChildScrollView(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withValues(
+                                        alpha: 0.1,
                                       ),
+                                      shape: BoxShape.circle,
                                     ),
-                                    const SizedBox(height: 12),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 40,
+                                    child: const Icon(
+                                      LucideIcons.checkCircle2,
+                                      color: Colors.green,
+                                      size: 48,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'Import Process Complete!',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  if (importedStats != null) ...[
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? AppColors.inputDark
+                                            : AppColors.inputLight,
+                                        borderRadius: BorderRadius.circular(16),
                                       ),
-                                      child: LinearProgressIndicator(
-                                        value: progress,
-                                        minHeight: 6,
-                                        borderRadius: BorderRadius.circular(10),
+                                      child: Column(
+                                        children: [
+                                          _buildStatRow(
+                                            'Entries Imported',
+                                            '${importedStats!['entriesImported'] ?? 0}',
+                                          ),
+                                          _buildStatRow(
+                                            'Shops Auto-Created',
+                                            '${importedStats!['shopsAutoCreated'] ?? 0}',
+                                          ),
+                                          _buildStatRow(
+                                            'Cashiers Auto-Created',
+                                            '${importedStats!['cashiersAutoCreated'] ?? 0}',
+                                          ),
+                                          const Divider(height: 16),
+                                          _buildStatRow(
+                                            'Total POS Sales',
+                                            '৳${(importedStats!['totalPosSales'] as num? ?? 0).toStringAsFixed(2)}',
+                                          ),
+                                          _buildStatRow(
+                                            'Total Cash Sales',
+                                            '৳${(importedStats!['totalCashSales'] as num? ?? 0).toStringAsFixed(2)}',
+                                          ),
+                                          _buildStatRow(
+                                            'Total Purchases',
+                                            '৳${(importedStats!['totalPurchases'] as num? ?? 0).toStringAsFixed(2)}',
+                                          ),
+                                          _buildStatRow(
+                                            'Total Expenses',
+                                            '৳${(importedStats!['totalExpenses'] as num? ?? 0).toStringAsFixed(2)}',
+                                          ),
+                                          _buildStatRow(
+                                            'Total Withdrawals',
+                                            '৳${(importedStats!['totalWithdrawals'] as num? ?? 0).toStringAsFixed(2)}',
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
-                                )
-                              : SingleChildScrollView(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: Colors.green.withValues(alpha: 0.1),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(
-                                          LucideIcons.checkCircle2,
-                                          color: Colors.green,
-                                          size: 48,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      const Text(
-                                        'Import Process Complete!',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      if (importedStats != null) ...[
-                                        Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: isDark
-                                                ? AppColors.inputDark
-                                                : AppColors.inputLight,
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          child: Column(
-                                            children: [
-                                              _buildStatRow(
-                                                  'Entries Imported',
-                                                  '${importedStats!['entriesImported'] ?? 0}'),
-                                              _buildStatRow(
-                                                  'Shops Auto-Created',
-                                                  '${importedStats!['shopsAutoCreated'] ?? 0}'),
-                                              _buildStatRow(
-                                                  'Cashiers Auto-Created',
-                                                  '${importedStats!['cashiersAutoCreated'] ?? 0}'),
-                                              const Divider(height: 16),
-                                              _buildStatRow(
-                                                  'Total POS Sales',
-                                                  '৳${(importedStats!['totalPosSales'] as num? ?? 0).toStringAsFixed(2)}'),
-                                              _buildStatRow(
-                                                  'Total Cash Sales',
-                                                  '৳${(importedStats!['totalCashSales'] as num? ?? 0).toStringAsFixed(2)}'),
-                                              _buildStatRow(
-                                                  'Total Purchases',
-                                                  '৳${(importedStats!['totalPurchases'] as num? ?? 0).toStringAsFixed(2)}'),
-                                              _buildStatRow(
-                                                  'Total Expenses',
-                                                  '৳${(importedStats!['totalExpenses'] as num? ?? 0).toStringAsFixed(2)}'),
-                                              _buildStatRow(
-                                                  'Total Withdrawals',
-                                                  '৳${(importedStats!['totalWithdrawals'] as num? ?? 0).toStringAsFixed(2)}'),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
+                                ],
+                              ),
+                            ),
                     ),
                     const Divider(height: 1),
 
@@ -2598,19 +3072,10 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
-            ),
-          ),
+          Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -3187,53 +3652,45 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
     );
 
     try {
-      final directory = await getApplicationDocumentsDirectory();
+      final directory = await getTemporaryDirectory();
       final file = File(
         '${directory.path}/shop_report_${DateTime.now().millisecondsSinceEpoch}.csv',
       );
       await file.writeAsString(csv.toString());
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Report exported to Excel (CSV): ${file.path}')),
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'Shop Report CSV',
+        text: 'Shop Report ($rangeStr)',
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save file: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to export Excel (CSV): $e')),
+      );
     }
   }
 
-  Future<void> _exportPdf(
+  Future<Uint8List> _buildShopReportPdf(
     List<ShopCardSummary> summaries,
     DateRangeBounds bounds,
   ) async {
+    final pdf = pw.Document();
     final rangeStr =
         '${_formatDateString(bounds.from)} to ${_formatDateString(bounds.to)}';
 
-    final html = StringBuffer();
-    html.writeln(
-      '<!doctype html><html><head><meta charset="utf-8"/><title>Monthly Shop Report</title>',
-    );
-    html.writeln('<style>');
-    html.writeln('body{font-family:sans-serif;padding:20px;color:#333;}');
-    html.writeln(
-      'h1{font-size:20px;border-bottom:2px solid #0D9488;padding-bottom:10px;}',
-    );
-    html.writeln(
-      'table{width:100%;border-collapse:collapse;margin-top:20px;font-size:12px;}',
-    );
-    html.writeln('th,td{border:1px solid #ddd;padding:8px;text-align:right;}');
-    html.writeln('th{background-color:#F3F4F6;}');
-    html.writeln('tr:nth-child(even){background-color:#F9FAFB;}');
-    html.writeln('</style></head><body>');
-    html.writeln('<h1>ShRiAh Group Shop Report</h1>');
-    html.writeln('<p><strong>Date Range:</strong> $rangeStr</p>');
-    html.writeln('<table><thead><tr>');
-    html.writeln(
-      '<th>Shop</th><th>POS</th><th>Cash</th><th>Bank</th><th>Credit</th><th>Total Sale</th><th>Purchase</th><th>Expense</th><th>Withdraw</th><th>+/-</th>',
-    );
-    html.writeln('</tr></thead><tbody>');
+    final headers = [
+      'Shop',
+      'POS',
+      'Cash',
+      'Bank',
+      'Credit',
+      'Total Sale',
+      'Purchase',
+      'Expense',
+      'Withdraw',
+      '+/-',
+    ];
 
     double tPos = 0,
         tCash = 0,
@@ -3245,24 +3702,85 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
         tWd = 0,
         tDiff = 0;
 
-    for (final s in summaries) {
+    final tableRows = <pw.TableRow>[];
+
+    // Header Row
+    tableRows.add(
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColors.teal),
+        children: headers.map((header) {
+          final isFirst = header == 'Shop';
+          return pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text(
+              header,
+              textAlign: isFirst ? pw.TextAlign.left : pw.TextAlign.right,
+              style: pw.TextStyle(
+                fontSize: 8.5,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+
+    // Data Rows
+    for (int i = 0; i < summaries.length; i++) {
+      final s = summaries[i];
       final stats = _calculateShopStats(s.shop.id, bounds);
-      html.writeln('<tr>');
-      html.writeln('<td><strong>${s.shop.name}</strong></td>');
-      html.writeln('<td>${stats.pos.toStringAsFixed(2)}</td>');
-      html.writeln('<td>${stats.cash.toStringAsFixed(2)}</td>');
-      html.writeln('<td>${stats.bank.toStringAsFixed(2)}</td>');
-      html.writeln('<td>${stats.credit.toStringAsFixed(2)}</td>');
-      html.writeln(
-        '<td><strong>${stats.totalSale.toStringAsFixed(2)}</strong></td>',
+      final isEven = i % 2 == 0;
+      tableRows.add(
+        pw.TableRow(
+          decoration: pw.BoxDecoration(
+            color: isEven ? PdfColors.grey100 : PdfColors.white,
+          ),
+          children: [
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Text(
+                s.shop.name,
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 8,
+                ),
+              ),
+            ),
+            ...[
+              stats.pos,
+              stats.cash,
+              stats.bank,
+              stats.credit,
+              stats.totalSale,
+              stats.purchase,
+              stats.expense,
+              stats.withdraw,
+            ].map(
+              (val) => pw.Padding(
+                padding: const pw.EdgeInsets.all(6),
+                child: pw.Text(
+                  val.toStringAsFixed(2),
+                  textAlign: pw.TextAlign.right,
+                  style: const pw.TextStyle(fontSize: 8),
+                ),
+              ),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Text(
+                '${stats.diff >= 0 ? "+" : ""}${stats.diff.toStringAsFixed(2)}',
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(
+                  fontSize: 8,
+                  fontWeight: pw.FontWeight.bold,
+                  color: stats.diff >= 0 ? PdfColors.green : PdfColors.red,
+                ),
+              ),
+            ),
+          ],
+        ),
       );
-      html.writeln('<td>${stats.purchase.toStringAsFixed(2)}</td>');
-      html.writeln('<td>${stats.expense.toStringAsFixed(2)}</td>');
-      html.writeln('<td>${stats.withdraw.toStringAsFixed(2)}</td>');
-      html.writeln(
-        '<td style="color:${stats.diff >= 0 ? 'green' : 'red'}">${stats.diff.toStringAsFixed(2)}</td>',
-      );
-      html.writeln('</tr>');
 
       tPos += stats.pos;
       tCash += stats.cash;
@@ -3275,37 +3793,162 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       tDiff += stats.diff;
     }
 
-    html.writeln('<tr style="font-weight:bold;background-color:#E5E7EB;">');
-    html.writeln('<td>TOTAL</td>');
-    html.writeln('<td>${tPos.toStringAsFixed(2)}</td>');
-    html.writeln('<td>${tCash.toStringAsFixed(2)}</td>');
-    html.writeln('<td>${tBank.toStringAsFixed(2)}</td>');
-    html.writeln('<td>${tCredit.toStringAsFixed(2)}</td>');
-    html.writeln('<td>${tTot.toStringAsFixed(2)}</td>');
-    html.writeln('<td>${tPur.toStringAsFixed(2)}</td>');
-    html.writeln('<td>${tExp.toStringAsFixed(2)}</td>');
-    html.writeln('<td>${tWd.toStringAsFixed(2)}</td>');
-    html.writeln('<td>${tDiff.toStringAsFixed(2)}</td>');
-    html.writeln('</tr>');
-    html.writeln('</tbody></table>');
-    html.writeln('</body></html>');
+    // Total Row
+    tableRows.add(
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(
+          color: PdfColors.grey200,
+          border: pw.Border(
+            top: pw.BorderSide(color: PdfColors.teal, width: 1),
+            bottom: pw.BorderSide(color: PdfColors.teal, width: 1),
+          ),
+        ),
+        children: [
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text(
+              'TOTAL',
+              style: pw.TextStyle(
+                fontSize: 8.5,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.teal,
+              ),
+            ),
+          ),
+          ...[tPos, tCash, tBank, tCredit, tTot, tPur, tExp, tWd].map(
+            (val) => pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Text(
+                val.toStringAsFixed(2),
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text(
+              '${tDiff >= 0 ? "+" : ""}${tDiff.toStringAsFixed(2)}',
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(
+                fontSize: 8.5,
+                fontWeight: pw.FontWeight.bold,
+                color: tDiff >= 0 ? PdfColors.green : PdfColors.red,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
 
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'ShRiAh Group Shop Report',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.teal,
+                  ),
+                ),
+                pw.Text(
+                  'Date Range: $rangeStr',
+                  style: const pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.grey,
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+            pw.Table(
+              border: const pw.TableBorder(
+                horizontalInside: pw.BorderSide(
+                  color: PdfColors.grey300,
+                  width: 0.5,
+                ),
+                bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+              ),
+              columnWidths: {0: const pw.FlexColumnWidth(2)},
+              children: tableRows,
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  Future<void> _exportPdf(
+    List<ShopCardSummary> summaries,
+    DateRangeBounds bounds, {
+    bool shareOnly = false,
+  }) async {
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File(
-        '${directory.path}/shop_report_${DateTime.now().millisecondsSinceEpoch}.html',
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
       );
-      await file.writeAsString(html.toString());
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Report PDF HTML page exported: ${file.path}')),
-      );
+
+      final pdfBytes = await _buildShopReportPdf(summaries, bounds);
+
+      if (mounted) {
+        Navigator.pop(context); // Pop loading dialog
+        _showPdfPreview(
+          context,
+          pdfBytes,
+          'shop_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
+        );
+      }
     } catch (e) {
+      if (mounted) Navigator.pop(context); // Pop loading dialog
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save HTML page: $e')));
+      ).showSnackBar(SnackBar(content: Text('Failed to process PDF: $e')));
     }
+  }
+
+  void _showPdfPreview(
+    BuildContext context,
+    Uint8List pdfBytes,
+    String fileName,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: const Text('PDF Report Preview'),
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+          body: PdfPreview(
+            build: (format) => pdfBytes,
+            pdfFileName: fileName,
+            allowPrinting: true,
+            allowSharing: true,
+            canChangePageFormat: false,
+            canChangeOrientation: false,
+            canDebug: false,
+          ),
+        ),
+      ),
+    );
   }
 
   void _shareReport(List<ShopCardSummary> summaries, DateRangeBounds bounds) {
@@ -3365,13 +4008,13 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
 
     Clipboard.setData(ClipboardData(text: sb.toString()));
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Report text formatted and copied to clipboard! Ready to share.',
-        ),
-      ),
-    );
+    try {
+      Share.share(sb.toString(), subject: 'Shop Report ($rangeStr)');
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to share: $e')));
+    }
   }
 
   // --- End Actions Dropdown Functions (Phase 2) ---
@@ -3477,10 +4120,14 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
             if (f == 'bank_sale' && e.entryType == 'sale' && e.bankSale > 0) {
               match = true;
             }
-            if (f == 'credit_sale' && e.entryType == 'sale' && e.creditSale > 0) {
+            if (f == 'credit_sale' &&
+                e.entryType == 'sale' &&
+                e.creditSale > 0) {
               match = true;
             }
-            if (f == 'difference' && e.entryType == 'sale' && e.difference != 0) {
+            if (f == 'difference' &&
+                e.entryType == 'sale' &&
+                e.difference != 0) {
               match = true;
             }
             if (f == 'purchase' && e.entryType == 'purchase') match = true;
@@ -3549,1045 +4196,1180 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       // Slice for pagination
       final paginatedEntries = filteredEntries.take(_visibleCount).toList();
 
-      return Scaffold(
-        backgroundColor: Colors.transparent,
-        floatingActionButton: Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.3),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+      return BlocListener<WorkingDateCubit, DateTime>(
+        listener: (context, workingDate) {
+          _triggerFilteredLoad(workingDate: workingDate);
+        },
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          floatingActionButton: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: FloatingActionButton(
+              backgroundColor: AppColors.primary,
+              elevation: 0,
+              child: const Icon(
+                LucideIcons.shoppingCart,
+                color: Colors.white,
+                size: 24,
               ),
-            ],
+              onPressed: () {
+                _showEntryFormSheet(defaultShopId);
+              },
+            ),
           ),
-          child: FloatingActionButton(
-            backgroundColor: AppColors.primary,
-            elevation: 0,
-            child: const Icon(LucideIcons.shoppingCart, color: Colors.white, size: 24),
-            onPressed: () {
-              // Check active shop mode for FAB
-              final currShop = _shops.firstWhere(
-                (s) => s.id == defaultShopId,
-                orElse: () => ShopModel(
-                  id: '',
-                  name: 'Unknown',
-                  createdAt: DateTime.now(),
+          body: SafeArea(
+            child: RefreshIndicator(
+              color: const Color(0xFF24B489),
+              onRefresh: () async {
+                _triggerFilteredLoad();
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
-              );
-              final simple = currShop.shopType == 'simple_cash';
-
-              showModalBottomSheet(
-                context: context,
-                backgroundColor: isDark ? AppColors.cardDark : Colors.white,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
-                  ),
-                ),
-                builder: (BuildContext context) {
-                  return SafeArea(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. Top Header Row (Shops Count Pill on left, 3-Dots Menu on right)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Text(
-                            'Select Transaction Type',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                              letterSpacing: 0.5,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1E293B)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFFE2E8F0),
                             ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                LucideIcons.store,
+                                size: 16,
+                                color: Color(0xFF0D9488),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Shops · ${_shops.length}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              LucideIcons.shoppingCart,
-                              color: AppColors.primary,
-                              size: 18,
-                            ),
-                          ),
-                          title: Text(
-                            simple ? 'Cash In Record' : 'POS & Cash Sales',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _showEntryFormSheet(defaultShopId);
-                          },
-                        ),
-                        if (!simple)
-                          ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
+
+                        Row(
+                          children: [
+                            Container(
                               decoration: BoxDecoration(
-                                color: AppColors.warning.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
+                                color: isDark
+                                    ? const Color(0xFF1E293B)
+                                    : const Color(0xFFF1F5F9),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFF334155)
+                                      : const Color(0xFFE2E8F0),
+                                ),
                               ),
-                              child: const Icon(
-                                LucideIcons.package,
-                                color: AppColors.warning,
-                                size: 18,
+                              child: IconButton(
+                                icon: Icon(
+                                  LucideIcons.refreshCw,
+                                  size: 18,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF475569),
+                                ),
+                                tooltip: 'Refresh Shop Data',
+                                onPressed: () {
+                                  _triggerFilteredLoad();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Refreshing shop data from server...',
+                                      ),
+                                      duration: Duration(seconds: 1),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
-                            title: const Text(
-                              'Purchase Invoice',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            onTap: () {
-                              Navigator.pop(context);
-                              _showEntryFormSheet(defaultShopId);
-                              _formTabController.index = 1;
-                            },
-                          ),
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.destructive.withValues(
-                                alpha: 0.1,
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              LucideIcons.fileText,
-                              color: AppColors.destructive,
-                              size: 18,
-                            ),
-                          ),
-                          title: const Text(
-                            'Expense Voucher',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _showEntryFormSheet(defaultShopId);
-                            _formTabController.index = simple ? 1 : 2;
-                          },
-                        ),
-                        if (!simple)
-                          ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
+                            const SizedBox(width: 8),
+                            // 3-Dots Menu Button
+                            Container(
                               decoration: BoxDecoration(
-                                color: Colors.purple.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
+                                color: isDark
+                                    ? const Color(0xFF1E293B)
+                                    : const Color(0xFFF1F5F9),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFF334155)
+                                      : const Color(0xFFE2E8F0),
+                                ),
                               ),
-                              child: const Icon(
-                                LucideIcons.banknote,
-                                color: Colors.purple,
-                                size: 18,
+                              child: PopupMenuButton<String>(
+                                icon: Icon(
+                                  LucideIcons.moreVertical,
+                                  size: 18,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF475569),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                color: isDark
+                                    ? AppColors.cardDark
+                                    : Colors.white,
+                                elevation: 8,
+                                onSelected: (String val) {
+                                  if (val == 'new_entry')
+                                    _showEntryFormSheet(defaultShopId);
+                                  if (val == 'shops') _showManageShops();
+                                  if (val == 'cashiers')
+                                    _showManageCashiers(defaultShopId);
+                                  if (val == 'import')
+                                    _showImportSales(defaultShopId);
+                                  if (val == 'report')
+                                    _showGenerateReport(shopCards, bounds);
+                                  if (val == 'excel')
+                                    _exportExcel(shopCards, bounds);
+                                  if (val == 'pdf')
+                                    _exportPdf(
+                                      shopCards,
+                                      bounds,
+                                      shareOnly: true,
+                                    );
+                                  if (val == 'share')
+                                    _shareReport(shopCards, bounds);
+                                },
+                                itemBuilder: (BuildContext context) => [
+                                  // 1. New Entry
+                                  PopupMenuItem<String>(
+                                    value: 'new_entry',
+                                    height: 40,
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          LucideIcons.plus,
+                                          size: 18,
+                                          color: AppColors.primary,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'New Entry',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuDivider(height: 1),
+
+                                  // 2. SHOP TOOLS Header
+                                  PopupMenuItem<String>(
+                                    enabled: false,
+                                    height: 32,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: 6,
+                                        bottom: 2,
+                                      ),
+                                      child: Text(
+                                        'SHOP TOOLS',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark
+                                              ? Colors.grey.shade400
+                                              : const Color(0xFF64748B),
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  // 3. Manage Shops
+                                  PopupMenuItem<String>(
+                                    value: 'shops',
+                                    height: 40,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.store,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.grey.shade300
+                                              : const Color(0xFF475569),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Manage Shops',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // 4. Cashiers
+                                  PopupMenuItem<String>(
+                                    value: 'cashiers',
+                                    height: 40,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.wallet,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.grey.shade300
+                                              : const Color(0xFF475569),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Cashiers',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  const PopupMenuDivider(height: 1),
+
+                                  // 6. Import Sales
+                                  PopupMenuItem<String>(
+                                    value: 'import',
+                                    height: 40,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.fileSpreadsheet,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.grey.shade300
+                                              : const Color(0xFF475569),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Import Sales',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // 7. Generate Report
+                                  PopupMenuItem<String>(
+                                    value: 'report',
+                                    height: 40,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.barChart3,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.grey.shade300
+                                              : const Color(0xFF475569),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Generate Report',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  const PopupMenuDivider(height: 1),
+
+                                  // 8. Export Excel
+                                  PopupMenuItem<String>(
+                                    value: 'excel',
+                                    height: 40,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.fileDown,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.grey.shade300
+                                              : const Color(0xFF475569),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Export Excel',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // 9. Export PDF
+                                  PopupMenuItem<String>(
+                                    value: 'pdf',
+                                    height: 40,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.fileText,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.grey.shade300
+                                              : const Color(0xFF475569),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Export PDF',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // 10. Share Report
+                                  PopupMenuItem<String>(
+                                    value: 'share',
+                                    height: 40,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.share2,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.grey.shade300
+                                              : const Color(0xFF475569),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Share Report',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            title: const Text(
-                              'Cash Withdrawal / Transfer',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            onTap: () {
-                              Navigator.pop(context);
-                              _showEntryFormSheet(defaultShopId);
-                              _formTabController.index = 3;
-                            },
-                          ),
-                        const SizedBox(height: 10),
+                          ],
+                        ),
                       ],
                     ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-        body: SafeArea(
-          child: RefreshIndicator(
-            color: const Color(0xFF24B489),
-            onRefresh: () async {
-              context.read<ShopBloc>().add(LoadShops());
-            },
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Top Header Row (Shops Count Pill on left, 3-Dots Menu on right)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
+                    const SizedBox(height: 16),
+
+                    // 2. Date Filter Pills Row (Horizontal Scroll)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildDatePill('today', 'Today', isDark),
+                          _buildDatePill('yesterday', 'Yesterday', isDark),
+                          _buildDatePill('week', 'Weekly', isDark),
+                          _buildDatePill('month', 'Monthly', isDark),
+                          _buildDatePill('custom', 'Custom', isDark),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Custom dates bounds selection
+                    if (_dateRange == 'custom') ...[
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(24),
+                          color: isDark ? AppColors.cardDark : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                            color: isDark
+                                ? AppColors.borderDark
+                                : const Color(0xFFE2E8F0),
                           ),
                         ),
                         child: Row(
                           children: [
-                            const Icon(LucideIcons.store, size: 16, color: Color(0xFF0D9488)),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Shops · ${_shops.length}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : const Color(0xFF0F172A),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      Row(
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                              ),
-                            ),
-                            child: IconButton(
-                              icon: Icon(
-                                LucideIcons.refreshCw,
-                                size: 18,
-                                color: isDark ? Colors.white : const Color(0xFF475569),
-                              ),
-                              tooltip: 'Refresh Shop Data',
-                              onPressed: () {
-                                context.read<ShopBloc>().add(LoadShops());
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Refreshing shop data from server...'), duration: Duration(seconds: 1)),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // 3-Dots Menu Button
-                          Container(
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        child: PopupMenuButton<String>(
-                          icon: Icon(
-                            LucideIcons.moreVertical,
-                            size: 18,
-                            color: isDark ? Colors.white : const Color(0xFF475569),
-                          ),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          color: isDark ? AppColors.cardDark : Colors.white,
-                          elevation: 8,
-                          onSelected: (String val) {
-                            if (val == 'new_entry') _showEntryFormSheet(defaultShopId);
-                            if (val == 'shops') _showManageShops();
-                            if (val == 'cashiers') _showManageCashiers(defaultShopId);
-                            if (val == 'import') _showImportSales(defaultShopId);
-                            if (val == 'report') _showGenerateReport(shopCards, bounds);
-                            if (val == 'excel') _exportExcel(shopCards, bounds);
-                            if (val == 'pdf') _exportPdf(shopCards, bounds);
-                            if (val == 'share') _shareReport(shopCards, bounds);
-                          },
-                          itemBuilder: (BuildContext context) => [
-                            // 1. New Entry
-                            PopupMenuItem<String>(
-                              value: 'new_entry',
-                              height: 40,
-                              child: Row(
-                                children: [
-                                  const Icon(LucideIcons.plus, size: 18, color: AppColors.primary),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'New Entry',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            Expanded(
+                              child: InkWell(
+                                onTap: () async {
+                                  final date = await showDatePicker(
+                                    context: context,
+                                    initialDate: _customFrom ?? workingDateTime,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2100),
+                                  );
+                                  if (date != null) {
+                                    setState(() {
+                                      _customFrom = date;
+                                      _visibleCount = 20;
+                                    });
+                                    _triggerFilteredLoad();
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                    horizontal: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? AppColors.inputDark
+                                        : AppColors.inputLight,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? AppColors.borderDark
+                                          : const Color(0xFFE2E8F0),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuDivider(height: 1),
-
-                            // 2. SHOP TOOLS Header
-                            PopupMenuItem<String>(
-                              enabled: false,
-                              height: 32,
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 6, bottom: 2),
-                                child: Text(
-                                  'SHOP TOOLS',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
-                                    letterSpacing: 0.6,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // 3. Manage Shops
-                            PopupMenuItem<String>(
-                              value: 'shops',
-                              height: 40,
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.store, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Manage Shops',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // 4. Cashiers
-                            PopupMenuItem<String>(
-                              value: 'cashiers',
-                              height: 40,
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.wallet, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Cashiers',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-
-
-                            const PopupMenuDivider(height: 1),
-
-                            // 6. Import Sales
-                            PopupMenuItem<String>(
-                              value: 'import',
-                              height: 40,
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.fileSpreadsheet, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Import Sales',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // 7. Generate Report
-                            PopupMenuItem<String>(
-                              value: 'report',
-                              height: 40,
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.barChart3, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Generate Report',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const PopupMenuDivider(height: 1),
-
-                            // 8. Export Excel
-                            PopupMenuItem<String>(
-                              value: 'excel',
-                              height: 40,
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.fileDown, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Export Excel',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // 9. Export PDF
-                            PopupMenuItem<String>(
-                              value: 'pdf',
-                              height: 40,
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.fileText, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Export PDF',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // 10. Share Report
-                            PopupMenuItem<String>(
-                              value: 'share',
-                              height: 40,
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.share2, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Share Report',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-                  const SizedBox(height: 16),
-
-                  // 2. Date Filter Pills Row (Horizontal Scroll)
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildDatePill('today', 'Today', isDark),
-                        _buildDatePill('yesterday', 'Yesterday', isDark),
-                        _buildDatePill('week', 'Weekly', isDark),
-                        _buildDatePill('month', 'Monthly', isDark),
-                        _buildDatePill('custom', 'Custom', isDark),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Custom dates bounds selection
-                  if (_dateRange == 'custom') ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.cardDark : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: InkWell(
-                              onTap: () async {
-                                final date = await showDatePicker(
-                                  context: context,
-                                  initialDate: _customFrom ?? workingDateTime,
-                                  firstDate: DateTime(2020),
-                                  lastDate: DateTime(2100),
-                                );
-                                if (date != null) {
-                                  setState(() {
-                                    _customFrom = date;
-                                    _visibleCount = 20;
-                                  });
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                                decoration: BoxDecoration(
-                                  color: isDark ? AppColors.inputDark : AppColors.inputLight,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      _customFrom != null ? _formatDateString(_customFrom!) : 'From Date',
-                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                    ),
-                                    const Icon(LucideIcons.calendar, size: 14, color: Colors.grey),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: InkWell(
-                              onTap: () async {
-                                final date = await showDatePicker(
-                                  context: context,
-                                  initialDate: _customTo ?? workingDateTime,
-                                  firstDate: DateTime(2020),
-                                  lastDate: DateTime(2100),
-                                );
-                                if (date != null) {
-                                  setState(() {
-                                    _customTo = date;
-                                    _visibleCount = 20;
-                                  });
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                                decoration: BoxDecoration(
-                                  color: isDark ? AppColors.inputDark : AppColors.inputLight,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      _customTo != null ? _formatDateString(_customTo!) : 'To Date',
-                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                    ),
-                                    const Icon(LucideIcons.calendar, size: 14, color: Colors.grey),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // 3. PER-SHOP SUMMARY HEADER
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'PER-SHOP SUMMARY',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
-                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () {
-                          context.read<ShopBloc>().add(
-                            LoadShopEntries(defaultShopId, workingDateTime),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(LucideIcons.refreshCw, size: 12, color: isDark ? Colors.white70 : const Color(0xFF475569)),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Refresh',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.white70 : const Color(0xFF475569),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // 4. PER-SHOP SUMMARY CARDS CAROUSEL
-                  SizedBox(
-                    height: 245,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: shopCards.length,
-                      separatorBuilder: (context, index) => const SizedBox(width: 12),
-                      itemBuilder: (context, idx) {
-                        final summary = shopCards[idx];
-                        final isSelected = _shopFilter == summary.shop.id || (_shopFilter == 'all' && idx == 0);
-                        return _buildShopSummaryCard(
-                          summary: summary,
-                          isSelected: isSelected,
-                          isDark: isDark,
-                          onTap: () {
-                            setState(() {
-                              _shopFilter = summary.shop.id;
-                              _visibleCount = 20;
-                            });
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 5. SELECTED SHOP BANNER (e.g. Main Store · This Month)
-                  if (_shopFilter != 'all') ...[
-                    Builder(
-                      builder: (context) {
-                        final currentShop = _shops.firstWhere(
-                          (s) => s.id == _shopFilter,
-                          orElse: () => ShopModel(id: '', name: 'Main Store', createdAt: DateTime.now()),
-                        );
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF132A29) : const Color(0xFFE8F5F1),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: const Color(0xFF24B489).withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(LucideIcons.store, size: 16, color: Color(0xFF0D9488)),
-                              const SizedBox(width: 8),
-                              Text(
-                                currentShop.name,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                                child: Text(
-                                  _dateRange == 'month' ? 'This Month' : _dateRange.toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                  ),
-                                ),
-                              ),
-                              const Spacer(),
-                              InkWell(
-                                onTap: () => setState(() => _shopFilter = 'all'),
-                                borderRadius: BorderRadius.circular(16),
-                                child: Icon(
-                                  LucideIcons.x,
-                                  size: 16,
-                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // 6. RECENT ENTRIES CONTAINER CARD
-                  Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.cardDark : Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Header title
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(LucideIcons.wallet, size: 18, color: Color(0xFF0D9488)),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    '${_shopFilter == 'all' ? (_shops.isNotEmpty ? _shops.first.name : 'Main Store') : _shops.firstWhere((s) => s.id == _shopFilter, orElse: () => ShopModel(id: '', name: 'Main Store', createdAt: DateTime.now())).name} · Recent Entries',
-                                    style: TextStyle(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                '${filteredEntries.length}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0)),
-
-                        // Entry Category Filter Pills
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Row(
-                            children: [
-                              _buildFilterPill('all', 'All'),
-                              _buildFilterPill('pos_sale', 'POS Sale'),
-                              _buildFilterPill('cash_sale', 'Cash Sale'),
-                              _buildFilterPill('bank_sale', 'Bank Sale'),
-                              _buildFilterPill('credit_sale', 'Credit Sale'),
-                              Container(
-                                margin: const EdgeInsets.only(left: 4),
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                                child: Icon(
-                                  LucideIcons.moreHorizontal,
-                                  size: 14,
-                                  color: isDark ? Colors.white70 : const Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Dynamic Net Total banner
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF132A29) : const Color(0xFFE8F5F1),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'NET TOTAL (ALL ENTRIES)',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                      color: Color(0xFF0D9488),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'This Month · ${filteredEntries.length} entries',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                'SAR ${netTotalSum.toStringAsFixed(netTotalSum.truncateToDouble() == netTotalSum ? 0 : 2)}',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF0D9488),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Entries Rows list
-                        paginatedEntries.isEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 48),
-                                child: Center(
-                                  child: Column(
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Icon(
-                                        LucideIcons.inbox,
-                                        size: 36,
-                                        color: isDark ? Colors.white38 : Colors.grey[400],
-                                      ),
-                                      const SizedBox(height: 12),
                                       Text(
-                                        'No matching records found in database.',
-                                        style: TextStyle(
-                                          color: isDark ? Colors.white70 : const Color(0xFF64748B),
-                                          fontSize: 13,
+                                        _customFrom != null
+                                            ? _formatDateString(_customFrom!)
+                                            : 'From Date',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
                                         ),
+                                      ),
+                                      const Icon(
+                                        LucideIcons.calendar,
+                                        size: 14,
+                                        color: Colors.grey,
                                       ),
                                     ],
                                   ),
                                 ),
-                              )
-                            : ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: paginatedEntries.length,
-                                separatorBuilder: (context, index) => Divider(
-                                  height: 1,
-                                  color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
-                                ),
-                                itemBuilder: (context, idx) {
-                                  final e = paginatedEntries[idx];
-                                  final eShop = _shops.firstWhere(
-                                    (s) => s.id == e.shopId,
-                                    orElse: () => ShopModel(
-                                      id: '',
-                                      name: 'Unknown',
-                                      createdAt: DateTime.now(),
-                                    ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: InkWell(
+                                onTap: () async {
+                                  final date = await showDatePicker(
+                                    context: context,
+                                    initialDate: _customTo ?? workingDateTime,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2100),
                                   );
-
-                                  final isOut = e.entryType != 'sale';
-                                  double amtVal = 0.0;
-                                  IconData trIcon = LucideIcons.shoppingCart;
-                                  Color trColor = AppColors.primary;
-
-                                  if (e.entryType == 'sale') {
-                                    amtVal = e.cashSale + e.bankSale + e.creditSale - e.dueReceivable;
-                                    trIcon = LucideIcons.shoppingBag;
-                                    trColor = AppColors.primary;
-                                  } else if (e.entryType == 'purchase') {
-                                    amtVal = e.purchaseAmount;
-                                    trIcon = LucideIcons.package;
-                                    trColor = AppColors.warning;
-                                  } else if (e.entryType == 'expense') {
-                                    amtVal = e.expenseAmount;
-                                    trIcon = LucideIcons.fileSpreadsheet;
-                                    trColor = AppColors.destructive;
-                                  } else if (e.entryType == 'withdraw') {
-                                    amtVal = e.withdrawAmount;
-                                    trIcon = LucideIcons.banknote;
-                                    trColor = Colors.purple;
+                                  if (date != null) {
+                                    setState(() {
+                                      _customTo = date;
+                                      _visibleCount = 20;
+                                    });
+                                    _triggerFilteredLoad();
                                   }
-
-                                  return ListTile(
-                                    onTap: () => _showEntryDetails(e),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 8,
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                    horizontal: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? AppColors.inputDark
+                                        : AppColors.inputLight,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? AppColors.borderDark
+                                          : const Color(0xFFE2E8F0),
                                     ),
-                                    leading: Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: trColor.withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                      child: Icon(
-                                        trIcon,
-                                        size: 18,
-                                        color: trColor,
-                                      ),
-                                    ),
-                                    title: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            eShop.name,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        _customTo != null
+                                            ? _formatDateString(_customTo!)
+                                            : 'To Date',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isDark ? AppColors.inputDark : AppColors.inputLight,
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            e.entryType.toUpperCase(),
-                                            style: const TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.grey,
-                                              letterSpacing: 0.5,
-                                            ),
+                                      ),
+                                      const Icon(
+                                        LucideIcons.calendar,
+                                        size: 14,
+                                        color: Colors.grey,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    // 3. PER-SHOP SUMMARY HEADER
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'PER-SHOP SUMMARY',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                            color: isDark
+                                ? const Color(0xFF94A3B8)
+                                : const Color(0xFF64748B),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            _triggerFilteredLoad();
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF1E293B)
+                                  : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isDark
+                                    ? const Color(0xFF334155)
+                                    : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  LucideIcons.refreshCw,
+                                  size: 12,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF475569),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Refresh',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : const Color(0xFF475569),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 4. PER-SHOP SUMMARY CARDS CAROUSEL
+                    SizedBox(
+                      height: 245,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: shopCards.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(width: 12),
+                        itemBuilder: (context, idx) {
+                          final summary = shopCards[idx];
+                          final isSelected = _shopFilter == summary.shop.id;
+                          return _buildShopSummaryCard(
+                            summary: summary,
+                            isSelected: isSelected,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(() {
+                                if (_shopFilter == summary.shop.id) {
+                                  _shopFilter = 'all';
+                                } else {
+                                  _shopFilter = summary.shop.id;
+                                }
+                                _visibleCount = 20;
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 5. SELECTED SHOP BANNER (e.g. Main Store · This Month)
+                    if (_shopFilter != 'all') ...[
+                      Builder(
+                        builder: (context) {
+                          final currentShop = _shops.firstWhere(
+                            (s) => s.id == _shopFilter,
+                            orElse: () => ShopModel(
+                              id: '',
+                              name: 'Main Store',
+                              createdAt: DateTime.now(),
+                            ),
+                          );
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF132A29)
+                                  : const Color(0xFFE8F5F1),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFF24B489,
+                                ).withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  LucideIcons.store,
+                                  size: 16,
+                                  color: Color(0xFF0D9488),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  currentShop.name,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF1E293B)
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? const Color(0xFF334155)
+                                          : const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _dateRange == 'month'
+                                        ? 'This Month'
+                                        : _dateRange.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark
+                                          ? const Color(0xFF94A3B8)
+                                          : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ),
+                                const Spacer(),
+                                InkWell(
+                                  onTap: () {
+                                    setState(() => _shopFilter = 'all');
+                                    _triggerFilteredLoad();
+                                  },
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Icon(
+                                    LucideIcons.x,
+                                    size: 16,
+                                    color: isDark
+                                        ? const Color(0xFF94A3B8)
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // 6. RECENT ENTRIES CONTAINER CARD
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.cardDark : Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: isDark
+                              ? AppColors.borderDark
+                              : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header title
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      LucideIcons.wallet,
+                                      size: 18,
+                                      color: Color(0xFF0D9488),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      '${_shopFilter == 'all' ? 'All Shops' : _shops.firstWhere(
+                                              (s) => s.id == _shopFilter,
+                                              orElse: () => ShopModel(id: '', name: 'Main Store', createdAt: DateTime.now()),
+                                            ).name} · Recent Entries',
+                                      style: TextStyle(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  '${filteredEntries.length}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? const Color(0xFF94A3B8)
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Divider(
+                            height: 1,
+                            color: isDark
+                                ? AppColors.borderDark
+                                : const Color(0xFFE2E8F0),
+                          ),
+
+                          // Entry Category Filter Pills
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              children: [
+                                _buildFilterPill('all', 'All'),
+                                _buildFilterPill('pos_sale', 'POS Sale'),
+                                _buildFilterPill('cash_sale', 'Cash Sale'),
+                                _buildFilterPill('bank_sale', 'Bank Sale'),
+                                _buildFilterPill('credit_sale', 'Credit Sale'),
+                                Container(
+                                  margin: const EdgeInsets.only(left: 4),
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF1E293B)
+                                        : const Color(0xFFF1F5F9),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isDark
+                                          ? const Color(0xFF334155)
+                                          : const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    LucideIcons.moreHorizontal,
+                                    size: 14,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Dynamic Net Total banner
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF132A29)
+                                  : const Color(0xFFE8F5F1),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'NET TOTAL (ALL ENTRIES)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                        color: Color(0xFF0D9488),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'This Month · ${filteredEntries.length} entries',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark
+                                            ? const Color(0xFF94A3B8)
+                                            : const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  'SAR ${netTotalSum.toStringAsFixed(netTotalSum.truncateToDouble() == netTotalSum ? 0 : 2)}',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF0D9488),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Entries Rows list
+                          paginatedEntries.isEmpty
+                              ? Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 48,
+                                  ),
+                                  child: Center(
+                                    child: Column(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.inbox,
+                                          size: 36,
+                                          color: isDark
+                                              ? Colors.white38
+                                              : Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'No matching records found in database.',
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? Colors.white70
+                                                : const Color(0xFF64748B),
+                                            fontSize: 13,
                                           ),
                                         ),
                                       ],
                                     ),
-                                    subtitle: Padding(
-                                      padding: const EdgeInsets.only(top: 4.0),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            e.notes ?? 'No annotations entered.',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                  ),
+                                )
+                              : ListView.separated(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: paginatedEntries.length,
+                                  separatorBuilder: (context, index) => Divider(
+                                    height: 1,
+                                    color: isDark
+                                        ? AppColors.borderDark
+                                        : const Color(0xFFE2E8F0),
+                                  ),
+                                  itemBuilder: (context, idx) {
+                                    final e = paginatedEntries[idx];
+                                    final eShop = _shops.firstWhere(
+                                      (s) => s.id == e.shopId,
+                                      orElse: () => ShopModel(
+                                        id: '',
+                                        name: 'Unknown',
+                                        createdAt: DateTime.now(),
+                                      ),
+                                    );
+
+                                    final isOut = e.entryType != 'sale';
+                                    double amtVal = 0.0;
+                                    IconData trIcon = LucideIcons.shoppingCart;
+                                    Color trColor = AppColors.primary;
+
+                                    if (e.entryType == 'sale') {
+                                      amtVal =
+                                          e.cashSale +
+                                          e.bankSale +
+                                          e.creditSale -
+                                          e.dueReceivable;
+                                      trIcon = LucideIcons.shoppingBag;
+                                      trColor = AppColors.primary;
+                                    } else if (e.entryType == 'purchase') {
+                                      amtVal = e.purchaseAmount;
+                                      trIcon = LucideIcons.package;
+                                      trColor = AppColors.warning;
+                                    } else if (e.entryType == 'expense') {
+                                      amtVal = e.expenseAmount;
+                                      trIcon = LucideIcons.fileSpreadsheet;
+                                      trColor = AppColors.destructive;
+                                    } else if (e.entryType == 'withdraw') {
+                                      amtVal = e.withdrawAmount;
+                                      trIcon = LucideIcons.banknote;
+                                      trColor = Colors.purple;
+                                    }
+
+                                    return ListTile(
+                                      onTap: () => _showEntryDetails(e),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 20,
+                                            vertical: 8,
                                           ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            children: [
-                                              const Icon(
-                                                LucideIcons.calendar,
-                                                size: 10,
+                                      leading: Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: trColor.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          trIcon,
+                                          size: 18,
+                                          color: trColor,
+                                        ),
+                                      ),
+                                      title: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              eShop.name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isDark
+                                                  ? AppColors.inputDark
+                                                  : AppColors.inputLight,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: isDark
+                                                    ? AppColors.borderDark
+                                                    : AppColors.borderLight,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              e.entryType.toUpperCase(),
+                                              style: const TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.bold,
                                                 color: Colors.grey,
+                                                letterSpacing: 0.5,
                                               ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                _formatDateString(e.txnDate),
-                                                style: const TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.grey,
-                                                ),
-                                              ),
-                                            ],
+                                            ),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          '${isOut ? "-" : "+"}${_formatCurrency(amtVal)}',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                            color: isOut ? AppColors.destructive : AppColors.success,
+                                      subtitle: Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 4.0,
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              e.notes ??
+                                                  'No annotations entered.',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                const Icon(
+                                                  LucideIcons.calendar,
+                                                  size: 10,
+                                                  color: Colors.grey,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  _formatDateString(e.txnDate),
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            '${isOut ? "-" : "+"}${_formatCurrency(amtVal)}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                              color: isOut
+                                                  ? AppColors.destructive
+                                                  : AppColors.success,
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        const Icon(
-                                          LucideIcons.chevronRight,
-                                          size: 16,
-                                          color: Colors.grey,
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
+                                          const SizedBox(width: 6),
+                                          const Icon(
+                                            LucideIcons.chevronRight,
+                                            size: 16,
+                                            color: Colors.grey,
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
 
-                        // Load More Button
-                        if (filteredEntries.length > paginatedEntries.length) ...[
-                          const Divider(height: 1),
-                          Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Center(
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                          // Load More Button
+                          if (filteredEntries.length >
+                              paginatedEntries.length) ...[
+                            const Divider(height: 1),
+                            Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Center(
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    side: BorderSide(
+                                      color: isDark
+                                          ? AppColors.borderDark
+                                          : AppColors.borderLight,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 12,
+                                    ),
                                   ),
-                                  side: BorderSide(
-                                    color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                                  child: Text(
+                                    'Load More (${filteredEntries.length - paginatedEntries.length} remaining)',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _visibleCount += 20;
+                                    });
+                                  },
                                 ),
-                                child: Text(
-                                  'Load More (${filteredEntries.length - paginatedEntries.length} remaining)',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _visibleCount += 20;
-                                  });
-                                },
                               ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 80),
-                ],
+                    const SizedBox(height: 80),
+                  ],
+                ),
               ),
             ),
           ),
@@ -4595,8 +5377,8 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
       );
     }
 
-      return const Center(child: Text('Failed to load shop states.'));
-    }
+    return const Center(child: Text('Failed to load shop states.'));
+  }
 
   Widget _buildShopSummaryCard({
     required ShopCardSummary summary,
@@ -4611,7 +5393,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
         ? const Color(0xFF24B489)
         : (isDark ? AppColors.borderDark : const Color(0xFFE2E8F0));
     final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final subtextColor = isDark
+        ? const Color(0xFF94A3B8)
+        : const Color(0xFF64748B);
 
     return InkWell(
       onTap: onTap,
@@ -4622,10 +5406,7 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: borderColor,
-            width: isSelected ? 1.5 : 1.0,
-          ),
+          border: Border.all(color: borderColor, width: isSelected ? 1.5 : 1.0),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4637,10 +5418,16 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFCCFBF1),
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFCCFBF1),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(LucideIcons.store, color: Color(0xFF0D9488), size: 15),
+                  child: const Icon(
+                    LucideIcons.store,
+                    color: Color(0xFF0D9488),
+                    size: 15,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -4673,10 +5460,14 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF0FDF4),
+                color: isDark
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFF0FDF4),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isDark ? const Color(0xFF334155) : const Color(0xFFD1FAE5),
+                  color: isDark
+                      ? const Color(0xFF334155)
+                      : const Color(0xFFD1FAE5),
                 ),
               ),
               child: Column(
@@ -4716,10 +5507,14 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF0FDF4),
+                color: isDark
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFF0FDF4),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isDark ? const Color(0xFF334155) : const Color(0xFFD1FAE5),
+                  color: isDark
+                      ? const Color(0xFF334155)
+                      : const Color(0xFFD1FAE5),
                 ),
               ),
               child: Column(
@@ -4756,11 +5551,10 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
 
             // Footer Subtext
             Text(
-              summary.lastDate != null ? 'Last: ${DateFormat('M/d/yyyy').format(summary.lastDate!)}' : 'No activity',
-              style: TextStyle(
-                fontSize: 10.5,
-                color: subtextColor,
-              ),
+              summary.lastDate != null
+                  ? 'Last: ${DateFormat('M/d/yyyy').format(summary.lastDate!)}'
+                  : 'No activity',
+              style: TextStyle(fontSize: 10.5, color: subtextColor),
             ),
           ],
         ),
@@ -4791,7 +5585,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
             border: Border.all(
               color: active
                   ? const Color(0xFF24B489)
-                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                  : (isDark
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFE2E8F0)),
             ),
           ),
           child: Text(
@@ -4801,7 +5597,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
               fontWeight: FontWeight.bold,
               color: active
                   ? Colors.white
-                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                  : (isDark
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFF475569)),
             ),
           ),
         ),
@@ -4810,7 +5608,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildFilterPill(String key, String label) {
-    final on = key == 'all' ? _activeFilters.isEmpty : _activeFilters.contains(key);
+    final on = key == 'all'
+        ? _activeFilters.isEmpty
+        : _activeFilters.contains(key);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
@@ -4842,7 +5642,9 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
             border: Border.all(
               color: on
                   ? const Color(0xFF24B489)
-                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                  : (isDark
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFE2E8F0)),
             ),
           ),
           child: Text(
@@ -4852,14 +5654,150 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
               fontWeight: FontWeight.bold,
               color: on
                   ? Colors.white
-                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                  : (isDark
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFF475569)),
             ),
           ),
         ),
       ),
     );
   }
+
+  bool _isImageAttachment(String path) {
+    try {
+      final uri = Uri.parse(path);
+      final cleanPath = uri.path.toLowerCase();
+      return cleanPath.endsWith('.png') ||
+          cleanPath.endsWith('.jpg') ||
+          cleanPath.endsWith('.jpeg') ||
+          cleanPath.endsWith('.gif') ||
+          cleanPath.endsWith('.webp') ||
+          cleanPath.endsWith('.heic') ||
+          cleanPath.endsWith('.heif');
+    } catch (_) {
+      final lower = path.toLowerCase();
+      final cleanPath = lower.split('?').first;
+      return cleanPath.endsWith('.png') ||
+          cleanPath.endsWith('.jpg') ||
+          cleanPath.endsWith('.jpeg') ||
+          cleanPath.endsWith('.gif') ||
+          cleanPath.endsWith('.webp') ||
+          cleanPath.endsWith('.heic') ||
+          cleanPath.endsWith('.heif');
+    }
+  }
+
+  Future<void> _openAttachment(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not open document: $url')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error launching document: $e')));
+      }
+    }
+  }
+
+  void _showFullScreenImage(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: SmartImageWidget(
+                imageUrl: url,
+                fit: BoxFit.contain,
+                fallbackWidget: Container(
+                  color: Colors.black,
+                  child: const Icon(
+                    Icons.broken_image,
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _triggerFilteredLoad({DateTime? workingDate}) {
+    final wDate = workingDate ?? context.read<WorkingDateCubit>().state;
+    final bounds = _getDateRangeBounds(wDate);
+
+    String? period;
+    String? startDate;
+    String? endDate;
+    String? date;
+
+    if (_dateRange == 'today') {
+      period = 'today';
+    } else if (_dateRange == 'yesterday') {
+      period = 'yesterday';
+    } else if (_dateRange == 'week') {
+      period = 'this_week';
+    } else if (_dateRange == 'month') {
+      period = 'this_month';
+    } else if (_dateRange == 'custom') {
+      period = 'custom';
+      startDate = _formatDateString(bounds.from);
+      endDate = _formatDateString(bounds.to);
+    }
+
+    context.read<ShopBloc>().add(
+      LoadShops(
+        period: period,
+        startDate: startDate,
+        endDate: endDate,
+        date: date,
+      ),
+    );
+
+    context.read<ShopBloc>().add(
+      LoadShopEntries(
+        shopId: 'all',
+        period: period,
+        startDate: startDate,
+        endDate: endDate,
+        date: date,
+      ),
+    );
+
+    context.read<ShopBloc>().add(
+      LoadShopSummary(
+        shopId: 'all',
+        period: period,
+        startDate: startDate,
+        endDate: endDate,
+        date: date,
+      ),
+    );
+  }
 }
-
-
-

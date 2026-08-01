@@ -3,7 +3,19 @@ import '../../models/shop_model.dart';
 
 abstract class ShopEvent {}
 
-class LoadShops extends ShopEvent {}
+class LoadShops extends ShopEvent {
+  final String? period;
+  final String? startDate;
+  final String? endDate;
+  final String? date;
+
+  LoadShops({
+    this.period,
+    this.startDate,
+    this.endDate,
+    this.date,
+  });
+}
 
 class SelectShop extends ShopEvent {
   final ShopModel shop;
@@ -11,9 +23,35 @@ class SelectShop extends ShopEvent {
 }
 
 class LoadShopEntries extends ShopEvent {
-  final String shopId;
-  final DateTime date;
-  LoadShopEntries(this.shopId, this.date);
+  final String? shopId;
+  final String? period;
+  final String? startDate;
+  final String? endDate;
+  final String? date;
+
+  LoadShopEntries({
+    this.shopId,
+    this.period,
+    this.startDate,
+    this.endDate,
+    this.date,
+  });
+}
+
+class LoadShopSummary extends ShopEvent {
+  final String? shopId;
+  final String? period;
+  final String? startDate;
+  final String? endDate;
+  final String? date;
+
+  LoadShopSummary({
+    this.shopId,
+    this.period,
+    this.startDate,
+    this.endDate,
+    this.date,
+  });
 }
 
 class AddEntry extends ShopEvent {

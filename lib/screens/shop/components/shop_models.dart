@@ -12,12 +12,28 @@ class ShopCardSummary {
   final double cashPosition;
   final double expectedBank;
   final DateTime? lastDate;
+  final double cashSale;
+  final double bankSale;
+  final double withdrawAmount;
+  final double purchaseAmount;
+  final double expenseAmount;
+  final double primary;
+  final double secondary;
+  final bool isSimple;
 
   ShopCardSummary({
     required this.shop,
     required this.cashPosition,
     required this.expectedBank,
     this.lastDate,
+    this.cashSale = 0.0,
+    this.bankSale = 0.0,
+    this.withdrawAmount = 0.0,
+    this.purchaseAmount = 0.0,
+    this.expenseAmount = 0.0,
+    this.primary = 0.0,
+    this.secondary = 0.0,
+    this.isSimple = false,
   });
 }
 

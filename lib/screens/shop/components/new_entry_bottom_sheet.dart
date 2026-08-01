@@ -555,6 +555,14 @@ class _NewEntryBottomSheetState extends State<NewEntryBottomSheet> with SingleTi
                         controller: _notesController,
                         maxLines: 2,
                         style: TextStyle(fontSize: 14, color: textColor),
+                        validator: (value) {
+                          final idx = _tabController.index;
+                          final isMandatory = idx == 1 || idx == 2 || idx == 3;
+                          if (isMandatory && (value == null || value.trim().isEmpty)) {
+                            return 'Notes description is required for purchases, expenses, and withdrawals.';
+                          }
+                          return null;
+                        },
                         decoration: InputDecoration(
                           contentPadding: const EdgeInsets.all(14),
                           fillColor: cardBg,
@@ -571,9 +579,17 @@ class _NewEntryBottomSheetState extends State<NewEntryBottomSheet> with SingleTi
                             borderRadius: BorderRadius.circular(20),
                             borderSide: const BorderSide(color: primaryTeal, width: 1.5),
                           ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: const BorderSide(color: Colors.red, width: 1.0),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: const BorderSide(color: Colors.red, width: 1.5),
+                          ),
+                          errorStyle: const TextStyle(color: Colors.red),
                         ),
-                      ),
-                    ],
+                      ),                    ],
                   ),
                   const SizedBox(height: 18),
 
@@ -871,6 +887,10 @@ class _NewEntryBottomSheetState extends State<NewEntryBottomSheet> with SingleTi
   }
 
   void _handleSubmit() {
+    if (_formKey.currentState == null || !_formKey.currentState!.validate()) {
+      return;
+    }
+
     String entryType = 'sale';
     if (_tabController.index == 1) entryType = 'purchase';
     if (_tabController.index == 2) entryType = 'expense';
@@ -894,6 +914,5 @@ class _NewEntryBottomSheetState extends State<NewEntryBottomSheet> with SingleTi
     };
 
     widget.onSubmit(data);
-    Navigator.pop(context);
   }
 }

@@ -37,20 +37,33 @@ ImageProvider getSmartImageProvider(String path) {
       return FileImage(file);
     }
   } catch (_) {}
-
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return NetworkImage(trimmed);
-  }
-
   if (trimmed.startsWith('file:')) {
     return const AssetImage('');
   }
 
-  const base = ApiClient.baseUrl;
-  final fullUrl = trimmed.startsWith('/') ? '$base$trimmed' : '$base/$trimmed';
-  return NetworkImage(fullUrl);
-}
+  final fullUrl = resolveImageUrl(trimmed);
+  if (fullUrl.isEmpty) {
+    return const AssetImage('');
+  }
 
+  final token = ApiClient().token;
+  final headers = <String, String>{};
+  if (token != null && token.isNotEmpty) {
+    headers['Authorization'] = 'Bearer $token';
+  }
+  return NetworkImage(fullUrl, headers: headers);
+}
+String resolveImageUrl(String path) {
+  final trimmed = path.trim();
+  if (trimmed.isEmpty) return '';
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+
+  final base = ApiClient.baseUrl;
+  return trimmed.startsWith('/') ? '$base$trimmed' : '$base/$trimmed';
+}
 class SmartImageWidget extends StatelessWidget {
   final String? imageUrl;
   final double? width;
@@ -131,12 +144,14 @@ class SmartImageWidget extends StatelessWidget {
     }
 
     // 2. Handle Network / API Response URLs
-    String fullUrl;
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      fullUrl = trimmed;
-    } else {
-      const base = ApiClient.baseUrl;
-      fullUrl = trimmed.startsWith('/') ? '$base$trimmed' : '$base/$trimmed';
+    final fullUrl = resolveImageUrl(trimmed);
+    if (fullUrl.isEmpty) {
+      return fallbackWidget;
+    }
+    final token = ApiClient().token;
+    final headers = <String, String>{};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
     }
 
     final img = Image.network(
@@ -144,11 +159,11 @@ class SmartImageWidget extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
+      headers: headers,
       errorBuilder: (context, error, stackTrace) {
         return fallbackWidget;
       },
     );
-
     return borderRadius != null ? ClipRRect(borderRadius: borderRadius!, child: img) : img;
   }
 }

@@ -58,6 +58,10 @@ class ShopEntryModel extends HiveObject {
   @HiveField(17)
   final DateTime createdAt;
 
+  // Extra optional details returned from GET entries API responses
+  final String? shopName;
+  final String? cashierName;
+
   ShopEntryModel({
     required this.id,
     required this.shopId,
@@ -77,6 +81,8 @@ class ShopEntryModel extends HiveObject {
     required this.txnDate,
     this.isDeleted = false,
     required this.createdAt,
+    this.shopName,
+    this.cashierName,
   });
 
   double calculateTotalSale() {
@@ -109,6 +115,8 @@ class ShopEntryModel extends HiveObject {
           : (json['created_at'] != null 
               ? DateTime.parse(json['created_at'] as String) 
               : DateTime.now()),
+      shopName: (json['shopName'] ?? json['shop_name']) as String?,
+      cashierName: (json['cashierName'] ?? json['cashier_name']) as String?,
     );
   }
 
@@ -132,6 +140,8 @@ class ShopEntryModel extends HiveObject {
       'txn_date': txnDate.toIso8601String().split('T')[0],
       'is_deleted': isDeleted,
       'created_at': createdAt.toIso8601String(),
+      'shop_name': shopName,
+      'cashier_name': cashierName,
     };
   }
 
@@ -152,6 +162,8 @@ class ShopEntryModel extends HiveObject {
     String? attachmentUrl,
     DateTime? txnDate,
     bool? isDeleted,
+    String? shopName,
+    String? cashierName,
   }) {
     return ShopEntryModel(
       id: id,
@@ -172,6 +184,8 @@ class ShopEntryModel extends HiveObject {
       txnDate: txnDate ?? this.txnDate,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt,
+      shopName: shopName ?? this.shopName,
+      cashierName: cashierName ?? this.cashierName,
     );
   }
 }

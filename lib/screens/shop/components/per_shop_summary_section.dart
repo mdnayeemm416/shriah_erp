@@ -226,7 +226,14 @@ class ShopSummaryCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Icon(LucideIcons.info, size: 11, color: subtextColor),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _showShopCashPositionDetails(context, summary, isDark),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(LucideIcons.info, size: 11, color: subtextColor),
+                        ),
+                      ),
                     ],
                   ),
                   Text(
@@ -267,7 +274,14 @@ class ShopSummaryCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Icon(LucideIcons.info, size: 11, color: subtextColor),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _showExpectedBankDetails(context, summary, isDark),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(LucideIcons.info, size: 11, color: subtextColor),
+                        ),
+                      ),
                     ],
                   ),
                   Text(
@@ -284,6 +298,284 @@ class ShopSummaryCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  void _showShopCashPositionDetails(BuildContext context, ShopCardSummary summary, bool isDark) {
+    if (summary.isSimple) {
+      _showMetricDetailsDialog(
+        context,
+        title: 'Shop Cash Position',
+        definition: 'Net cash held by this simple cash shop. Total Cash minus Total Cost over the selected period.',
+        formula: 'Total Cash - Total Cost = Cash Sale - Expense',
+        affectedBy: {
+          'Total Cash (Cash Sale)': {
+            'value': 'SAR ${summary.primary.toStringAsFixed(2)}',
+            'subText': 'Primary cash sales recorded for this simple shop.',
+          },
+          'Total Cost (Expense)': {
+            'value': 'SAR ${summary.secondary.toStringAsFixed(2)}',
+            'subText': 'Secondary expenses paid from cash.',
+          },
+          'Cash Position': {
+            'value': 'SAR ${summary.cashPosition.toStringAsFixed(2)}',
+            'highlight': true,
+          },
+        },
+        isDark: isDark,
+      );
+    } else {
+      final totalCash = summary.cashSale + summary.withdrawAmount;
+      final totalCost = summary.purchaseAmount + summary.expenseAmount;
+      _showMetricDetailsDialog(
+        context,
+        title: 'Shop Cash Position',
+        definition: 'Net cash held by this shop. Total Cash minus Total Cost over the selected period.',
+        formula: 'Total Cash - Total Cost = (Cash Sale + Bank Withdraw) - (Purchase + Expense)',
+        affectedBy: {
+          'Total Cash': {
+            'value': 'SAR ${totalCash.toStringAsFixed(2)}',
+            'subText': 'Cash Sale: SAR ${summary.cashSale.toStringAsFixed(2)} + Bank Withdraw: SAR ${summary.withdrawAmount.toStringAsFixed(2)}',
+          },
+          'Total Cost': {
+            'value': 'SAR ${totalCost.toStringAsFixed(2)}',
+            'subText': 'Purchase: SAR ${summary.purchaseAmount.toStringAsFixed(2)} + Expense: SAR ${summary.expenseAmount.toStringAsFixed(2)}',
+          },
+          'Cash Position': {
+            'value': 'SAR ${summary.cashPosition.toStringAsFixed(2)}',
+            'highlight': true,
+          },
+        },
+        isDark: isDark,
+      );
+    }
+  }
+
+  void _showExpectedBankDetails(BuildContext context, ShopCardSummary summary, bool isDark) {
+    _showMetricDetailsDialog(
+      context,
+      title: 'Expected Bank Balance',
+      definition: 'Net bank position based on bank sales and bank withdrawals.',
+      formula: 'Bank Sale - Bank Withdraw',
+      affectedBy: {
+        'Bank Sale': {
+          'value': 'SAR ${summary.bankSale.toStringAsFixed(2)}',
+          'subText': 'Sales transactions paid to the bank account.',
+        },
+        'Bank Withdraw': {
+          'value': 'SAR ${summary.withdrawAmount.toStringAsFixed(2)}',
+          'subText': 'Cash withdrawals from the bank account.',
+        },
+        'Expected Bank Balance': {
+          'value': 'SAR ${summary.expectedBank.toStringAsFixed(2)}',
+          'highlight': true,
+        },
+      },
+      isDark: isDark,
+    );
+  }
+
+  void _showMetricDetailsDialog(
+    BuildContext context, {
+    required String title,
+    required String definition,
+    required String formula,
+    required Map<String, Map<String, dynamic>> affectedBy,
+    required bool isDark,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+        final bodyColor = isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155);
+        final sectionHeaderColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+        final codeBgColor = isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
+        final borderCol = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+          actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: titleColor,
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.close, size: 20, color: sectionHeaderColor),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // WHAT IT MEANS
+                Text(
+                  'WHAT IT MEANS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                    color: sectionHeaderColor,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  definition,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: bodyColor,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // FORMULA
+                Text(
+                  'FORMULA',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                    color: sectionHeaderColor,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: codeBgColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: borderCol),
+                  ),
+                  child: Text(
+                    formula,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1.3,
+                      color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // AFFECTED BY
+                Text(
+                  'AFFECTED BY',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                    color: sectionHeaderColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...affectedBy.entries.map((entry) {
+                  final isLast = entry.key == affectedBy.keys.last;
+                  final Map<String, dynamic> data = entry.value;
+                  final highlight = data['highlight'] == true;
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: isLast ? 0.0 : 8.0),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: highlight
+                            ? (isDark ? const Color(0xFF132A29) : const Color(0xFFE8F5F1))
+                            : (isDark ? const Color(0xFF0F172A).withOpacity(0.5) : const Color(0xFFF8FAFC)),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: highlight
+                              ? const Color(0xFF24B489).withOpacity(0.5)
+                              : borderCol,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                entry.key,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: titleColor,
+                                ),
+                              ),
+                              Text(
+                                data['value'] as String,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: highlight
+                                      ? const Color(0xFF10B981)
+                                      : titleColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (data['subText'] != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              data['subText'] as String,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: sectionHeaderColor,
+                                height: 1.2,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                style: TextButton.styleFrom(
+                  backgroundColor: const Color(0xFF24B489),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text(
+                  'Close',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

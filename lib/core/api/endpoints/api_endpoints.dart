@@ -65,6 +65,8 @@ class ApiEndpoints {
   static const String shopCashiers = '/shops/cashiers';
   static const String shopEntries = '/shops/entries';
   static const String shopImportCsv = '/shops/import-csv';
+  static const String shopSummary = '/shops/summary';
+  static String shopSummaryById(String id) => '/shops/$id/summary';
 
   // --- Employees & Staff ---
   static const String employees = '/employees';

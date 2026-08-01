@@ -25,10 +25,10 @@ class CashierModel extends HiveObject {
 
   factory CashierModel.fromJson(Map<String, dynamic> json) {
     return CashierModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      shopId: json['shop_id'] as String,
-      isDeleted: json['is_deleted'] as bool? ?? false,
+      id: (json['id'] ?? '') as String,
+      name: (json['name'] ?? '') as String,
+      shopId: (json['shop_id'] ?? json['shopId'] ?? '') as String,
+      isDeleted: (json['is_deleted'] ?? json['isDeleted']) as bool? ?? false,
     );
   }
 
