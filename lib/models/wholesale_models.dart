@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'package:intl/intl.dart';
 
 part 'wholesale_models.g.dart';
 
@@ -34,7 +35,7 @@ class WholesaleCustomerModel extends HiveObject {
   @HiveField(9)
   final String? notes;
 
-  @HiveField(10)
+  @HiveField(10, defaultValue: 0.0)
   final double creditLimit;
 
   WholesaleCustomerModel({
@@ -277,6 +278,15 @@ class WholesaleSaleModel extends HiveObject {
   @HiveField(12)
   final DateTime createdAt;
 
+  @HiveField(13)
+  final double? totalReturnedAmount;
+
+  @HiveField(14)
+  final double? netTotal;
+
+  @HiveField(15)
+  final List<Map<String, dynamic>>? returns;
+
   WholesaleSaleModel({
     required this.id,
     required this.invoiceNumber,
@@ -291,6 +301,9 @@ class WholesaleSaleModel extends HiveObject {
     this.status = 'completed',
     this.isDeleted = false,
     required this.createdAt,
+    this.totalReturnedAmount,
+    this.netTotal,
+    this.returns,
   });
 
   factory WholesaleSaleModel.fromJson(Map<String, dynamic> json) {
@@ -308,6 +321,18 @@ class WholesaleSaleModel extends HiveObject {
           .toList();
     }
 
+    bool isDel = false;
+    if (json['is_deleted'] != null) {
+      if (json['is_deleted'] is bool) {
+        isDel = json['is_deleted'] as bool;
+      } else if (json['is_deleted'] is int) {
+        isDel = (json['is_deleted'] as int) == 1;
+      } else if (json['is_deleted'] is String) {
+        final s = json['is_deleted'] as String;
+        isDel = s == '1' || s.toLowerCase() == 'true';
+      }
+    }
+
     return WholesaleSaleModel(
       id: json['id'] as String? ?? '',
       invoiceNumber: invNum,
@@ -320,10 +345,19 @@ class WholesaleSaleModel extends HiveObject {
       dueAmount: (json['due_amount'] as num? ?? 0.0).toDouble(),
       paymentMethod: json['payment_method'] as String? ?? 'cash',
       status: json['status'] as String? ?? 'completed',
-      isDeleted: json['is_deleted'] as bool? ?? false,
+      isDeleted: isDel,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
           : DateTime.now(),
+      totalReturnedAmount: json['total_returned_amount'] != null
+          ? (json['total_returned_amount'] as num).toDouble()
+          : null,
+      netTotal: json['net_total'] != null
+          ? (json['net_total'] as num).toDouble()
+          : null,
+      returns: json['returns'] != null
+          ? (json['returns'] as List).map((r) => Map<String, dynamic>.from(r as Map)).toList()
+          : null,
     );
   }
 
@@ -341,11 +375,31 @@ class WholesaleSaleModel extends HiveObject {
       'payment_method': paymentMethod,
       'status': status,
       'is_deleted': isDeleted,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': DateFormat('yyyy-MM-dd HH:mm:ss').format(createdAt),
+      if (totalReturnedAmount != null) 'total_returned_amount': totalReturnedAmount,
+      if (netTotal != null) 'net_total': netTotal,
+      if (returns != null) 'returns': returns,
     };
   }
 
+  Map<String, dynamic> toCreateJson() {
+    final jsonMap = <String, dynamic>{
+      'customer_name': customerName,
+      'customer_mobile': customerMobile,
+      'total': total,
+      'discount': discount,
+      'due_amount': dueAmount,
+      'payment_method': paymentMethod,
+      'items': items.map((i) => i.toJson()).toList(),
+    };
+    if (customerId != null && customerId!.isNotEmpty) {
+      jsonMap['customer_id'] = customerId;
+    }
+    return jsonMap;
+  }
+
   WholesaleSaleModel copyWith({
+    String? id,
     int? invoiceNumber,
     String? customerId,
     String? customerName,
@@ -357,9 +411,12 @@ class WholesaleSaleModel extends HiveObject {
     String? paymentMethod,
     String? status,
     bool? isDeleted,
+    double? totalReturnedAmount,
+    double? netTotal,
+    List<Map<String, dynamic>>? returns,
   }) {
     return WholesaleSaleModel(
-      id: id,
+      id: id ?? this.id,
       invoiceNumber: invoiceNumber ?? this.invoiceNumber,
       customerId: customerId ?? this.customerId,
       customerName: customerName ?? this.customerName,
@@ -372,6 +429,9 @@ class WholesaleSaleModel extends HiveObject {
       status: status ?? this.status,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt,
+      totalReturnedAmount: totalReturnedAmount ?? this.totalReturnedAmount,
+      netTotal: netTotal ?? this.netTotal,
+      returns: returns ?? this.returns,
     );
   }
 }
@@ -381,6 +441,7 @@ class WholesaleSalesReturnModel {
   final String? saleId;
   final String invoiceNumber;
   final String customerName;
+  final String? customerId;
   final double refundAmount;
   final String reason;
   final List<Map<String, dynamic>>? items;
@@ -390,6 +451,7 @@ class WholesaleSalesReturnModel {
     this.saleId,
     required this.invoiceNumber,
     required this.customerName,
+    this.customerId,
     required this.refundAmount,
     required this.reason,
     this.items,
@@ -401,6 +463,7 @@ class WholesaleSalesReturnModel {
       saleId: json['sale_id'] as String?,
       invoiceNumber: json['invoice_number']?.toString() ?? '',
       customerName: json['customer_name'] as String? ?? '',
+      customerId: json['customer_id'] as String?,
       refundAmount: (json['refund_amount'] as num? ?? 0.0).toDouble(),
       reason: json['reason'] as String? ?? '',
       items: (json['items'] as List?)?.cast<Map<String, dynamic>>(),
@@ -413,10 +476,73 @@ class WholesaleSalesReturnModel {
       'sale_id': saleId,
       'invoice_number': invoiceNumber,
       'customer_name': customerName,
+      if (customerId != null) 'customer_id': customerId,
       'refund_amount': refundAmount,
       'reason': reason,
-      if (items != null) 'items': items,
+      'items': items ?? [],
     };
+  }
+}
+
+class WholesaleInvoiceReturns {
+  final String saleIdentifier;
+  final double totalReturnedAmount;
+  final int returnsCount;
+  final List<WholesaleSalesReturnModel> returns;
+
+  WholesaleInvoiceReturns({
+    required this.saleIdentifier,
+    required this.totalReturnedAmount,
+    required this.returnsCount,
+    required this.returns,
+  });
+
+  factory WholesaleInvoiceReturns.fromJson(Map<String, dynamic> json) {
+    return WholesaleInvoiceReturns(
+      saleIdentifier: json['sale_identifier']?.toString() ?? '',
+      totalReturnedAmount: (json['total_returned_amount'] as num? ?? 0.0).toDouble(),
+      returnsCount: json['returns_count'] as int? ?? 0,
+      returns: (json['returns'] as List? ?? [])
+          .map((r) => WholesaleSalesReturnModel.fromJson(Map<String, dynamic>.from(r as Map)))
+          .toList(),
+    );
+  }
+}
+
+class WholesaleSalesReturnSummary {
+  final SalesReturnMetric today;
+  final SalesReturnMetric thisMonth;
+  final SalesReturnMetric total;
+
+  WholesaleSalesReturnSummary({
+    required this.today,
+    required this.thisMonth,
+    required this.total,
+  });
+
+  factory WholesaleSalesReturnSummary.fromJson(Map<String, dynamic> json) {
+    return WholesaleSalesReturnSummary(
+      today: SalesReturnMetric.fromJson(Map<String, dynamic>.from(json['today'] ?? {})),
+      thisMonth: SalesReturnMetric.fromJson(Map<String, dynamic>.from(json['this_month'] ?? {})),
+      total: SalesReturnMetric.fromJson(Map<String, dynamic>.from(json['total'] ?? {})),
+    );
+  }
+}
+
+class SalesReturnMetric {
+  final int count;
+  final double amount;
+
+  SalesReturnMetric({
+    required this.count,
+    required this.amount,
+  });
+
+  factory SalesReturnMetric.fromJson(Map<String, dynamic> json) {
+    return SalesReturnMetric(
+      count: json['count'] as int? ?? 0,
+      amount: (json['amount'] as num? ?? 0.0).toDouble(),
+    );
   }
 }
 
@@ -467,8 +593,8 @@ class WholesalePurchaseModel extends HiveObject {
 
     return WholesalePurchaseModel(
       id: json['id'] as String? ?? '',
-      invoiceNumber: json['invoice_number'] as String? ?? '',
-      supplierName: json['supplier_name'] as String? ?? 'Supplier',
+      invoiceNumber: json['invoice_number'] as String? ?? json['invoiceNumber'] as String? ?? '',
+      supplierName: json['supplier_name'] as String? ?? json['supplierName'] as String? ?? 'Supplier',
       items: itemList,
       total: (json['total'] as num? ?? 0.0).toDouble(),
       notes: json['notes'] as String?,
@@ -489,6 +615,17 @@ class WholesalePurchaseModel extends HiveObject {
       'notes': notes,
       'is_deleted': isDeleted,
       'created_at': createdAt.toIso8601String(),
+    };
+  }
+
+  Map<String, dynamic> toApiJson() {
+    return {
+      'id': id,
+      'invoiceNumber': invoiceNumber,
+      'supplierName': supplierName,
+      'notes': notes,
+      'total': total,
+      'items': items.map((i) => i.toJson()).toList(),
     };
   }
 
@@ -719,5 +856,65 @@ class WholesaleCategoryModel extends HiveObject {
       imageUrl: imageUrl ?? this.imageUrl,
       smartSection: smartSection ?? this.smartSection,
     );
+  }
+}
+
+class WholesaleProfitDetailsModel {
+  final String period;
+  final String? startDate;
+  final String? endDate;
+  final int salesCount;
+  final double totalSoldItems;
+  final double totalSales;
+  final double totalPurchaseCost;
+  final double netProfit;
+  final double profitMarginPercentage;
+
+  WholesaleProfitDetailsModel({
+    required this.period,
+    this.startDate,
+    this.endDate,
+    required this.salesCount,
+    required this.totalSoldItems,
+    required this.totalSales,
+    required this.totalPurchaseCost,
+    required this.netProfit,
+    required this.profitMarginPercentage,
+  });
+
+  factory WholesaleProfitDetailsModel.fromJson(Map<String, dynamic> json) {
+    final netPrf = (json['netProfit'] as num? ?? json['net_profit'] as num? ?? 0.0).toDouble();
+    final totSales = (json['totalSales'] as num? ?? json['total_sales'] as num? ?? 0.0).toDouble();
+
+    double margin = (json['profitMarginPercentage'] as num? ?? json['profit_margin_percentage'] as num? ?? 0.0).toDouble();
+    if (margin == 0.0 && totSales > 0) {
+      margin = (netPrf / totSales) * 100;
+    }
+
+    return WholesaleProfitDetailsModel(
+      period: json['period'] as String? ?? 'monthly',
+      startDate: json['startDate'] as String? ?? json['start_date'] as String?,
+      endDate: json['endDate'] as String? ?? json['end_date'] as String?,
+      salesCount: (json['salesCount'] as num? ?? json['sales_count'] as num? ?? 0).toInt(),
+      totalSoldItems: (json['totalSoldItems'] as num? ?? json['total_sold_items'] as num? ?? 0.0).toDouble(),
+      totalSales: totSales,
+      totalPurchaseCost: (json['totalPurchaseCost'] as num? ?? json['total_purchase_cost'] as num? ?? 0.0).toDouble(),
+      netProfit: netPrf,
+      profitMarginPercentage: margin,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'period': period,
+      'startDate': startDate,
+      'endDate': endDate,
+      'salesCount': salesCount,
+      'totalSoldItems': totalSoldItems,
+      'totalSales': totalSales,
+      'totalPurchaseCost': totalPurchaseCost,
+      'netProfit': netProfit,
+      'profitMarginPercentage': profitMarginPercentage,
+    };
   }
 }

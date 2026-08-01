@@ -20,9 +20,9 @@ class ShopModelAdapter extends TypeAdapter<ShopModel> {
       id: fields[0] as String,
       name: fields[1] as String,
       shopType: fields[2] as String?,
-      isDeleted: fields[3] as bool? ?? false,
+      isDeleted: fields[3] as bool,
       createdAt: fields[4] as DateTime,
-      openingCash: (fields[5] as num?)?.toDouble(),
+      openingCash: fields[5] as double?,
     );
   }
 

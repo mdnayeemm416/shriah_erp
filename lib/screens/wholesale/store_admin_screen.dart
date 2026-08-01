@@ -517,12 +517,24 @@ class _StoreAdminScreenState extends State<StoreAdminScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return BlocBuilder<WholesaleCubit, WholesaleState>(
-      builder: (context, state) {
-        if (state.loading) {
-          return const Center(child: CircularProgressIndicator());
+    return BlocConsumer<WholesaleCubit, WholesaleState>(
+      listener: (context, state) {
+        if (state.error.isNotEmpty) {
+          String msg = state.error;
+          if (msg.startsWith("Exception: ")) {
+            msg = msg.substring(11);
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          context.read<WholesaleCubit>().clearError();
         }
-
+      },
+      builder: (context, state) {
         // Sync tab controller with state
         if (_tabController.index != state.activeTab) {
           _tabController.index = state.activeTab;
@@ -530,45 +542,60 @@ class _StoreAdminScreenState extends State<StoreAdminScreen>
 
         final tabPages = _buildTabPages();
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final isLarge = constraints.maxWidth >= 950;
+        return Stack(
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isLarge = constraints.maxWidth >= 950;
 
-            if (isLarge) {
-              // ── Desktop: sidebar layout ──
-              return Scaffold(
-                body: Row(
-                  children: [
-                    _buildSideMenu(state, isDark),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: tabPages,
-                      ),
+                if (isLarge) {
+                  // ── Desktop: sidebar layout ──
+                  return Scaffold(
+                    body: Row(
+                      children: [
+                        _buildSideMenu(state, isDark),
+                        Expanded(
+                          child: TabBarView(
+                            controller: _tabController,
+                            physics: const NeverScrollableScrollPhysics(),
+                            children: tabPages,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  );
+                } else {
+                  // ── Mobile: top pills layout ──
+                  return Scaffold(
+                    backgroundColor: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    appBar: PreferredSize(
+                      preferredSize: const Size.fromHeight(60),
+                      child: _buildTopPillsMenu(state, isDark),
+                    ),
+                    body: TabBarView(
+                      controller: _tabController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: tabPages,
+                    ),
+                    floatingActionButton: _buildFabForTab(state.activeTab),
+                  );
+                }
+              },
+            ),
+            if (state.loading)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF24B489),
+                    ),
+                  ),
                 ),
-              );
-            } else {
-              // ── Mobile: top pills layout ──
-              return Scaffold(
-                backgroundColor: isDark
-                    ? const Color(0xFF0F172A)
-                    : const Color(0xFFF8FAFC),
-                appBar: PreferredSize(
-                  preferredSize: const Size.fromHeight(60),
-                  child: _buildTopPillsMenu(state, isDark),
-                ),
-                body: TabBarView(
-                  controller: _tabController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: tabPages,
-                ),
-                floatingActionButton: _buildFabForTab(state.activeTab),
-              );
-            }
-          },
+              ),
+          ],
         );
       },
     );

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../blocs/wholesale/wholesale_state.dart';
+import '../../../models/wholesale_models.dart';
 import '../wholesale_transaction_dialog.dart';
 import 'transaction_detail_dialog.dart';
 import 'sales_return_dialog.dart';
@@ -20,11 +21,31 @@ class SalesTab extends StatefulWidget {
 class _SalesTabState extends State<SalesTab> {
   String _periodFilter = 'Daily'; // 'Daily', 'Weekly', 'Monthly', 'Custom'
   String _tabFilter = 'Completed Sales'; // 'Completed Sales', 'Recycle Bin'
-  DateTime _selectedDate = DateTime.now();
+  DateTime _startDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  DateTime _endDate = DateTime.now();
+  String _searchQuery = '';
+  final _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<WholesaleCubit>().loadAllData(
+        startDate: _startDate,
+        endDate: _endDate,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   String _fmt(double val) => 'SAR ${val.toStringAsFixed(2)}';
   String _fmtShort(double val) => 'SAR ${val.toInt() == val ? val.toInt() : val.toStringAsFixed(2)}';
-  String _fmtDate(DateTime dt) => DateFormat('M/d/yyyy, h:mm:ss a').format(dt);
+  String _fmtDate(DateTime dt) => DateFormat('M/d/yyyy, h:mm a').format(dt);
 
   Future<void> _shareToWhatsApp(String mobile, String msg) async {
     final cleanMobile = mobile.replaceAll(RegExp(r'\D'), '');
@@ -37,16 +58,94 @@ class _SalesTabState extends State<SalesTab> {
     }
   }
 
-  void _selectDate(BuildContext context) async {
+  void _applyPeriodPreset(String preset) {
+    final now = DateTime.now();
+    DateTime start = _startDate;
+    DateTime end = now;
+    if (preset == 'Daily') {
+      start = DateTime(now.year, now.month, now.day);
+      end = now;
+    } else if (preset == 'Weekly') {
+      start = now.subtract(const Duration(days: 7));
+      end = now;
+    } else if (preset == 'Monthly') {
+      start = now.subtract(const Duration(days: 30));
+      end = now;
+    }
+    setState(() {
+      _periodFilter = preset;
+      _startDate = start;
+      _endDate = end;
+    });
+    context.read<WholesaleCubit>().loadAllData(
+      startDate: start,
+      endDate: end,
+    );
+  }
+
+  void _selectStartDate(BuildContext context) async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
+      initialDate: _startDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
     );
     if (picked != null) {
-      setState(() => _selectedDate = picked);
+      setState(() {
+        _startDate = picked;
+        _periodFilter = 'Custom';
+      });
+      context.read<WholesaleCubit>().loadAllData(
+        startDate: picked,
+        endDate: _endDate,
+      );
     }
+  }
+
+  void _selectEndDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) {
+      setState(() {
+        _endDate = picked;
+        _periodFilter = 'Custom';
+      });
+      context.read<WholesaleCubit>().loadAllData(
+        startDate: _startDate,
+        endDate: picked,
+      );
+    }
+  }
+
+  void _confirmPurge(BuildContext context, WholesaleSaleModel sale) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Purge Sale Permanently', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text('Are you sure you want to permanently purge Sale #${sale.invoiceNumber}? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<WholesaleCubit>().purgeSale(sale.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Sale #${sale.invoiceNumber} permanently purged from database.')),
+              );
+            },
+            child: const Text('Purge Permanently', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -66,13 +165,33 @@ class _SalesTabState extends State<SalesTab> {
       builder: (context, state) {
         final allSales = state.sales;
 
-        // Filter sales by active tab (Completed vs Cancelled/Recycle Bin)
+        // Filter sales by active tab, date range & search query
         final displaySales = allSales.where((s) {
+          final isRecycle = s.isDeleted || s.status == 'cancelled';
           if (_tabFilter == 'Recycle Bin') {
-            return s.status == 'cancelled';
+            if (!isRecycle) return false;
           } else {
-            return s.status != 'cancelled';
+            if (isRecycle) return false;
           }
+
+          // Date range filter
+          final sDate = DateTime(s.createdAt.year, s.createdAt.month, s.createdAt.day);
+          final start = DateTime(_startDate.year, _startDate.month, _startDate.day);
+          final end = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
+
+          final matchesDate = (sDate.isAfter(start) || sDate.isAtSameMomentAs(start)) &&
+              (sDate.isBefore(end) || sDate.isAtSameMomentAs(end));
+          if (!matchesDate) return false;
+
+          // Text Search filter
+          if (_searchQuery.isNotEmpty) {
+            final invMatch = s.invoiceNumber.toString().contains(_searchQuery);
+            final nameMatch = s.customerName.toLowerCase().contains(_searchQuery);
+            final mobileMatch = s.customerMobile.toLowerCase().contains(_searchQuery);
+            return invMatch || nameMatch || mobileMatch;
+          }
+
+          return true;
         }).toList();
 
         final totalSalesAmount = displaySales.fold(0.0, (sum, s) => sum + s.total);
@@ -80,7 +199,7 @@ class _SalesTabState extends State<SalesTab> {
         return ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            // 1. Top Total Sale Banner Card (Matching Image 2)
+            // 1. Top Total Sale Banner Card
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(18),
@@ -130,7 +249,7 @@ class _SalesTabState extends State<SalesTab> {
                           ),
                           selected: active,
                           onSelected: (selected) {
-                            if (selected) setState(() => _periodFilter = filter);
+                            if (selected) _applyPeriodPreset(filter);
                           },
                           selectedColor: primaryColor,
                           backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -145,39 +264,80 @@ class _SalesTabState extends State<SalesTab> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Date Selection Box
-                  InkWell(
-                    onTap: () => _selectDate(context),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            DateFormat('MM/dd/yyyy').format(_selectedDate),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: textColor,
+                  // Date Range Selection (Start Date & End Date)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _selectStartDate(context),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: cardBg,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: borderColor),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Start Date', style: TextStyle(fontSize: 10, color: labelColor, fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 2),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      DateFormat('MM/dd/yyyy').format(_startDate),
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+                                    ),
+                                    Icon(LucideIcons.calendar, size: 14, color: labelColor),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          Icon(LucideIcons.calendar, size: 16, color: labelColor),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _selectEndDate(context),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: cardBg,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: borderColor),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('End Date', style: TextStyle(fontSize: 10, color: labelColor, fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 2),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      DateFormat('MM/dd/yyyy').format(_endDate),
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+                                    ),
+                                    Icon(LucideIcons.calendar, size: 14, color: labelColor),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
 
-            // 2. Sales Returns Card (Yellow Card Matching Image 2)
+            // 2. Sales Returns Card
             InkWell(
               onTap: () => SalesReturnDialog.show(context),
               borderRadius: BorderRadius.circular(24),
@@ -233,9 +393,27 @@ class _SalesTabState extends State<SalesTab> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildReturnStat('TODAY', 'SAR 0.00', isDark),
-                        _buildReturnStat('THIS MONTH', 'SAR 0.00', isDark),
-                        _buildReturnStat('TOTAL', 'SAR 0.00', isDark),
+                        _buildReturnStat(
+                          'TODAY',
+                          state.salesReturnSummary != null
+                              ? '${_fmt(state.salesReturnSummary!.today.amount)} (${state.salesReturnSummary!.today.count})'
+                              : 'SAR 0.00 (0)',
+                          isDark,
+                        ),
+                        _buildReturnStat(
+                          'THIS MONTH',
+                          state.salesReturnSummary != null
+                              ? '${_fmt(state.salesReturnSummary!.thisMonth.amount)} (${state.salesReturnSummary!.thisMonth.count})'
+                              : 'SAR 0.00 (0)',
+                          isDark,
+                        ),
+                        _buildReturnStat(
+                          'TOTAL',
+                          state.salesReturnSummary != null
+                              ? '${_fmt(state.salesReturnSummary!.total.amount)} (${state.salesReturnSummary!.total.count})'
+                              : 'SAR 0.00 (0)',
+                          isDark,
+                        ),
                       ],
                     ),
                   ],
@@ -290,6 +468,51 @@ class _SalesTabState extends State<SalesTab> {
             ),
             const SizedBox(height: 14),
 
+            // Search Bar
+            Container(
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderColor),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.search, size: 18, color: labelColor),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      style: TextStyle(color: textColor, fontSize: 13.5),
+                      decoration: InputDecoration(
+                        hintText: 'Search by Invoice, Customer Name or Mobile...',
+                        hintStyle: TextStyle(color: labelColor, fontSize: 13.5),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onChanged: (val) {
+                        setState(() {
+                          _searchQuery = val.toLowerCase().trim();
+                        });
+                      },
+                    ),
+                  ),
+                  if (_searchQuery.isNotEmpty)
+                    GestureDetector(
+                      onTap: () {
+                        _searchController.clear();
+                        setState(() {
+                          _searchQuery = '';
+                        });
+                      },
+                      child: Icon(LucideIcons.x, size: 16, color: labelColor),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
             // 4. Primary Action Buttons (+ New Sale, + New Sales Return)
             Row(
               children: [
@@ -337,19 +560,20 @@ class _SalesTabState extends State<SalesTab> {
             ),
             const SizedBox(height: 16),
 
-            // 5. Sales List Items (Matching Image 2 Card design)
+            // 5. Sales List Items
             if (displaySales.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(32.0),
                 child: Center(
                   child: Text(
-                    _tabFilter == 'Recycle Bin' ? 'Recycle bin is empty.' : 'No sales logged yet.',
+                    _tabFilter == 'Recycle Bin' ? 'Recycle bin is empty.' : 'No sales found for the selected period.',
                     style: TextStyle(color: labelColor, fontSize: 13),
                   ),
                 ),
               )
             else
               ...displaySales.map((sale) {
+                final isRecycled = sale.isDeleted || sale.status == 'cancelled';
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10.0),
                   child: InkWell(
@@ -366,7 +590,7 @@ class _SalesTabState extends State<SalesTab> {
                       decoration: BoxDecoration(
                         color: cardBg,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: borderColor),
+                        border: Border.all(color: isRecycled ? Colors.redAccent.withValues(alpha: 0.4) : borderColor),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,22 +598,66 @@ class _SalesTabState extends State<SalesTab> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                '#${sale.invoiceNumber}',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: textColor,
-                                ),
+                              Row(
+                                children: [
+                                  Text(
+                                    '#${sale.invoiceNumber}',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                  if (isRecycled) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                                      ),
+                                      child: const Text(
+                                        'RECYCLED',
+                                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
-                              Text(
-                                _fmt(sale.total),
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: textColor,
+                              if (sale.totalReturnedAmount != null && sale.totalReturnedAmount! > 0) ...[
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      _fmt(sale.netTotal ?? (sale.total - sale.totalReturnedAmount!)),
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        color: textColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      'Ret: -${_fmt(sale.totalReturnedAmount!)}',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        color: Colors.redAccent,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              ] else ...[
+                                Text(
+                                  _fmt(sale.total),
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    color: textColor,
+                                  ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -414,30 +682,73 @@ class _SalesTabState extends State<SalesTab> {
                               ),
                               Row(
                                 children: [
-                                  InkWell(
-                                    onTap: () {
-                                      final msg =
-                                          'Dear Customer, invoice #${sale.invoiceNumber} details:\nTotal: ${sale.total} SAR\nThank you!';
-                                      _shareToWhatsApp(sale.customerMobile, msg);
-                                    },
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(4.0),
-                                      child: Icon(LucideIcons.messageCircle, size: 18, color: Color(0xFF10B981)),
+                                  if (!isRecycled) ...[
+                                    InkWell(
+                                      onTap: () {
+                                        final msg =
+                                            'Dear Customer, invoice #${sale.invoiceNumber} details:\nTotal: ${sale.total} SAR\nThank you!';
+                                        _shareToWhatsApp(sale.customerMobile, msg);
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(4.0),
+                                        child: Icon(LucideIcons.messageCircle, size: 18, color: Color(0xFF10B981)),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  InkWell(
-                                    onTap: () {
-                                      context.read<WholesaleCubit>().cancelSale(sale.id);
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Sale moved to Recycle Bin.')),
-                                      );
-                                    },
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(4.0),
-                                      child: Icon(LucideIcons.trash2, size: 18, color: Colors.red),
+                                    const SizedBox(width: 8),
+                                    InkWell(
+                                      onTap: () {
+                                        context.read<WholesaleCubit>().softDeleteSale(sale.id);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Sale #${sale.invoiceNumber} moved to Recycle Bin.')),
+                                        );
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(4.0),
+                                        child: Icon(LucideIcons.trash2, size: 18, color: Colors.redAccent),
+                                      ),
                                     ),
-                                  ),
+                                  ] else ...[
+                                    // Recycle Bin Actions: Restore & Permanent Purge
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        side: const BorderSide(color: Color(0xFF24B489)),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      onPressed: () {
+                                        context.read<WholesaleCubit>().restoreSale(sale.id);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Sale #${sale.invoiceNumber} restored & stock re-deducted successfully.'),
+                                            backgroundColor: const Color(0xFF24B489),
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(LucideIcons.rotateCcw, size: 13, color: Color(0xFF24B489)),
+                                      label: const Text(
+                                        'Restore',
+                                        style: TextStyle(color: Color(0xFF24B489), fontWeight: FontWeight.bold, fontSize: 11),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        side: const BorderSide(color: Colors.redAccent),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      onPressed: () => _confirmPurge(context, sale),
+                                      icon: const Icon(LucideIcons.trash2, size: 13, color: Colors.redAccent),
+                                      label: const Text(
+                                        'Purge',
+                                        style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 11),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ],

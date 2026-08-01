@@ -88,6 +88,16 @@ class TransactionDetailDialog extends StatelessWidget {
         ),
       );
       if (context.mounted) Navigator.pop(context);
+    } else if (entry is WholesalePurchaseModel) {
+      // Open full Purchase Checkout Editor dialog
+      await showDialog(
+        context: context,
+        builder: (ctx) => WholesaleTransactionDialog(
+          kind: 'purchase',
+          initialPurchase: entry as WholesalePurchaseModel,
+        ),
+      );
+      if (context.mounted) Navigator.pop(context);
     } else {
       final result = await showDialog<bool>(
         context: context,
@@ -124,6 +134,9 @@ class TransactionDetailDialog extends StatelessWidget {
     double dueAmount = 0.0;
     double paidAmount = 0.0;
     double subtotal = 0.0;
+    double totalReturnedAmount = 0.0;
+    double netTotal = 0.0;
+    List<Map<String, dynamic>>? saleReturns;
     String paymentMethod = '';
     String saleStatus = '';
     String? notes;
@@ -140,6 +153,9 @@ class TransactionDetailDialog extends StatelessWidget {
       dueAmount = sale.dueAmount;
       subtotal = sale.items.fold(0.0, (sum, i) => sum + (i.qty * i.price));
       paidAmount = (totalAmount - dueAmount).clamp(0.0, double.infinity);
+      totalReturnedAmount = sale.totalReturnedAmount ?? 0.0;
+      netTotal = sale.netTotal ?? (totalAmount - totalReturnedAmount);
+      saleReturns = sale.returns;
       paymentMethod = sale.paymentMethod;
       saleStatus = sale.status;
     } else if (entry is WholesalePurchaseModel) {
@@ -495,6 +511,108 @@ class TransactionDetailDialog extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (totalReturnedAmount > 0) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatPill(
+                              label: 'RETURNED',
+                              value: _fmt(totalReturnedAmount),
+                              valueColor: Colors.redAccent,
+                              cardBg: cardBg,
+                              borderColor: borderColor,
+                              labelColor: labelColor,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildStatPill(
+                              label: 'NET TOTAL',
+                              value: _fmt(netTotal),
+                              valueColor: const Color(0xFF10B981),
+                              cardBg: cardBg,
+                              borderColor: borderColor,
+                              labelColor: labelColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    if (saleReturns != null && saleReturns.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'RETURNS HISTORY',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                                color: labelColor,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ...saleReturns.map((ret) {
+                              final amount = (ret['refund_amount'] as num? ?? 0.0).toDouble();
+                              final reason = ret['reason'] as String? ?? 'Damaged Goods';
+                              final dateStr = ret['created_at'] as String? ?? '';
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            reason,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: textColor,
+                                            ),
+                                          ),
+                                          if (dateStr.isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              dateStr,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: labelColor,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    Text(
+                                      '- ${_fmt(amount)}',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.redAccent,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     if (notes != null && notes.isNotEmpty) ...[
                       const SizedBox(height: 12),

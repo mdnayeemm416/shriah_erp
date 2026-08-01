@@ -79,15 +79,18 @@ class _AddPartyBottomSheetState extends State<AddPartyBottomSheet> {
       if (notes.isNotEmpty) notes,
     ].join(' | ');
 
+    final partyObj = WholesaleCustomerModel(
+      id: widget.partyToEdit?.id ?? '',
+      name: name,
+      mobile: phone,
+      openingDue: netOpening,
+      address: address.isEmpty ? null : address,
+      notes: combinedNotes.isEmpty ? null : combinedNotes,
+      createdAt: widget.partyToEdit?.createdAt ?? DateTime.now(),
+    );
+
     if (widget.partyToEdit != null) {
-      final updated = widget.partyToEdit!.copyWith(
-        name: name,
-        mobile: phone,
-        address: address.isEmpty ? null : address,
-        openingDue: netOpening,
-        notes: combinedNotes.isEmpty ? null : combinedNotes,
-      );
-      context.read<WholesaleCubit>().updateCustomer(updated);
+      context.read<WholesaleCubit>().updateCustomer(partyObj);
     } else {
       context.read<WholesaleCubit>().createCustomer(
             name: name,
@@ -98,7 +101,7 @@ class _AddPartyBottomSheetState extends State<AddPartyBottomSheet> {
           );
     }
 
-    Navigator.pop(context);
+    Navigator.pop(context, partyObj);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$_partyType "$name" saved successfully.')),
     );

@@ -24,6 +24,22 @@ class DashboardTab extends StatefulWidget {
 class _DashboardTabState extends State<DashboardTab> {
   final String _profitPeriod = 'Monthly';
   String _recentEntryFilter = 'All';
+  WholesaleProfitDetailsModel? _profitDetails;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfitDetails();
+  }
+
+  Future<void> _loadProfitDetails() async {
+    final res = await context.read<WholesaleCubit>().getProfitDetails(period: 'monthly');
+    if (mounted) {
+      setState(() {
+        _profitDetails = res;
+      });
+    }
+  }
 
   String _fmt(double val) {
     return '${val.toStringAsFixed(2)} SAR';
@@ -339,9 +355,11 @@ class _DashboardTabState extends State<DashboardTab> {
     return BlocBuilder<WholesaleCubit, WholesaleState>(
       builder: (context, state) {
         final profitStats = _getProfitStatsForPeriod(state);
-        final double profitVal = profitStats['profit'] ?? 0.0;
-        final double revenueVal = profitStats['revenue'] ?? 0.0;
-        final int soldCount = profitStats['sold'] ?? 0;
+        final double profitVal = _profitDetails?.netProfit ?? profitStats['profit'] ?? 0.0;
+        final double revenueVal = _profitDetails?.totalSales ?? profitStats['revenue'] ?? 0.0;
+        final int soldCount = _profitDetails?.totalSoldItems.toInt() ?? profitStats['sold'] ?? 0;
+        final double marginVal = _profitDetails?.profitMarginPercentage ??
+            (revenueVal > 0 ? (profitVal / revenueVal) * 100 : 0.0);
 
         final currentStock = state.stockValuation;
         final receivable = state.totalCustomerDue;
@@ -355,7 +373,10 @@ class _DashboardTabState extends State<DashboardTab> {
           backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
           body: RefreshIndicator(
             onRefresh: () async {
-              await context.read<WholesaleCubit>().loadAllData();
+              await Future.wait([
+                context.read<WholesaleCubit>().loadAllData(),
+                _loadProfitDetails(),
+              ]);
             },
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
@@ -692,6 +713,17 @@ class _DashboardTabState extends State<DashboardTab> {
                                           color: isDark ? Colors.white : Colors.black,
                                         ),
                                       ),
+                                      if (marginVal > 0) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Margin: ${marginVal.toStringAsFixed(2)}%',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF0F9D58),
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ],

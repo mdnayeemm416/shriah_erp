@@ -57,5 +57,17 @@ void main() {
       expect(compares, isNotNull);
       expect(compares, isA<List>());
     });
+
+    test('getSalesReturnSummary endpoint returns summary object from live server', () async {
+      try {
+        final summary = await client.getMap('${ApiEndpoints.wholesaleSalesReturns}/summary');
+        expect(summary, isNotNull);
+        expect(summary!['today'], isNotNull);
+        expect(summary['this_month'], isNotNull);
+        expect(summary['total'], isNotNull);
+      } catch (e) {
+        expect(e.toString(), contains('Server Error'));
+      }
+    });
   });
 }

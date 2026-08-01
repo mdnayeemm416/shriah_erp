@@ -25,13 +25,17 @@ class WholesaleCustomerModelAdapter
       isActive: fields[4] as bool,
       isDeleted: fields[5] as bool,
       createdAt: fields[6] as DateTime,
+      address: fields[7] as String?,
+      vatNumber: fields[8] as String?,
+      notes: fields[9] as String?,
+      creditLimit: fields[10] == null ? 0.0 : fields[10] as double,
     );
   }
 
   @override
   void write(BinaryWriter writer, WholesaleCustomerModel obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -45,7 +49,15 @@ class WholesaleCustomerModelAdapter
       ..writeByte(5)
       ..write(obj.isDeleted)
       ..writeByte(6)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(7)
+      ..write(obj.address)
+      ..writeByte(8)
+      ..write(obj.vatNumber)
+      ..writeByte(9)
+      ..write(obj.notes)
+      ..writeByte(10)
+      ..write(obj.creditLimit);
   }
 
   @override
@@ -182,13 +194,18 @@ class WholesaleSaleModelAdapter extends TypeAdapter<WholesaleSaleModel> {
       status: fields[10] as String,
       isDeleted: fields[11] as bool,
       createdAt: fields[12] as DateTime,
+      totalReturnedAmount: fields[13] as double?,
+      netTotal: fields[14] as double?,
+      returns: (fields[15] as List?)
+          ?.map((dynamic e) => (e as Map).cast<String, dynamic>())
+          ?.toList(),
     );
   }
 
   @override
   void write(BinaryWriter writer, WholesaleSaleModel obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -214,7 +231,13 @@ class WholesaleSaleModelAdapter extends TypeAdapter<WholesaleSaleModel> {
       ..writeByte(11)
       ..write(obj.isDeleted)
       ..writeByte(12)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(13)
+      ..write(obj.totalReturnedAmount)
+      ..writeByte(14)
+      ..write(obj.netTotal)
+      ..writeByte(15)
+      ..write(obj.returns);
   }
 
   @override

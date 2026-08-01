@@ -13,6 +13,7 @@ class WholesaleState {
   final String error;
   final int activeTab;
   final String searchQuery;
+  final WholesaleSalesReturnSummary? salesReturnSummary;
 
   WholesaleState({
     this.customers = const [],
@@ -26,6 +27,7 @@ class WholesaleState {
     this.error = '',
     this.activeTab = 0,
     this.searchQuery = '',
+    this.salesReturnSummary,
   });
 
   // KPI Calculations
@@ -133,6 +135,7 @@ class WholesaleState {
     String? error,
     int? activeTab,
     String? searchQuery,
+    WholesaleSalesReturnSummary? salesReturnSummary,
   }) {
     return WholesaleState(
       customers: customers ?? this.customers,
@@ -146,6 +149,7 @@ class WholesaleState {
       error: error ?? this.error,
       activeTab: activeTab ?? this.activeTab,
       searchQuery: searchQuery ?? this.searchQuery,
+      salesReturnSummary: salesReturnSummary ?? this.salesReturnSummary,
     );
   }
 }

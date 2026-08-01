@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../models/shop_model.dart';
 import '../../../models/shop_entry_model.dart';
 import '../../../models/cashier_model.dart';
@@ -589,10 +591,27 @@ class _NewEntryBottomSheetState extends State<NewEntryBottomSheet> with SingleTi
                       ),
                       const SizedBox(height: 6),
                       InkWell(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('File picker opened...')),
-                          );
+                        onTap: () async {
+                          try {
+                            final result = await FilePicker.pickFiles(
+                              type: FileType.custom,
+                              allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+                            );
+                            if (result != null && result.files.isNotEmpty) {
+                              final path = result.files.first.path;
+                              if (path != null) {
+                                setState(() {
+                                  _attachmentController.text = path;
+                                });
+                              }
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to pick file: $e')),
+                              );
+                            }
+                          }
                         },
                         borderRadius: BorderRadius.circular(24),
                         child: Container(
@@ -613,15 +632,33 @@ class _NewEntryBottomSheetState extends State<NewEntryBottomSheet> with SingleTi
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                _attachmentController.text.isNotEmpty
-                                    ? _attachmentController.text
-                                    : 'No file chosen',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: subtextColor,
+                              Expanded(
+                                child: Text(
+                                  _attachmentController.text.isNotEmpty
+                                      ? _attachmentController.text.split(Platform.pathSeparator).last
+                                      : 'No file chosen',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: subtextColor,
+                                  ),
                                 ),
                               ),
+                              if (_attachmentController.text.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _attachmentController.clear();
+                                    });
+                                  },
+                                  child: Icon(
+                                    LucideIcons.x,
+                                    size: 16,
+                                    color: Colors.red.shade400,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),

@@ -8,7 +8,7 @@ class ShopHeader extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onNewEntry;
   final VoidCallback onManageShops;
   final VoidCallback onManageCashiers;
-  final VoidCallback onManageCategories;
+
   final VoidCallback onImportData;
   final VoidCallback onExportPdf;
   final VoidCallback onExportExcel;
@@ -20,7 +20,6 @@ class ShopHeader extends StatelessWidget implements PreferredSizeWidget {
     this.onNewEntry,
     required this.onManageShops,
     required this.onManageCashiers,
-    required this.onManageCategories,
     required this.onImportData,
     required this.onExportPdf,
     required this.onExportExcel,
@@ -92,9 +91,6 @@ class ShopHeader extends StatelessWidget implements PreferredSizeWidget {
                   break;
                 case 'cashiers':
                   onManageCashiers();
-                  break;
-                case 'categories':
-                  onManageCategories();
                   break;
                 case 'import':
                   onImportData();
@@ -181,25 +177,7 @@ class ShopHeader extends StatelessWidget implements PreferredSizeWidget {
                   ],
                 ),
               ),
-              PopupMenuItem<String>(
-                value: 'categories',
-                height: 40,
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.box, size: 18, color: isDark ? Colors.grey.shade300 : const Color(0xFF475569)),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Categories',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                        color: isDark ? Colors.white : const Color(0xFF1E293B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(height: 1),
+
               PopupMenuItem<String>(
                 value: 'import',
                 height: 40,

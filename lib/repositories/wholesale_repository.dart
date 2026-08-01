@@ -61,14 +61,26 @@ class WholesaleRepository {
   Future<void> deletePayment(String paymentId) => paymentRepo.deletePayment(paymentId);
 
   // --- Sales CRUD ---
-  Future<List<WholesaleSaleModel>> getSales() => saleRepo.getSales();
-  Future<void> saveSale(WholesaleSaleModel sale) => saleRepo.saveSale(sale);
+  Future<List<WholesaleSaleModel>> getSales({DateTime? startDate, DateTime? endDate}) => saleRepo.getSales(startDate: startDate, endDate: endDate);
+  Future<List<WholesaleSaleModel>> getRecycleBinSales() => saleRepo.getRecycleBinSales();
+  Future<WholesaleSaleModel?> saveSale(WholesaleSaleModel sale) => saleRepo.saveSale(sale);
   Future<void> cancelSale(String saleId) => saleRepo.cancelSale(saleId);
-  Future<void> deleteSale(String saleId) => saleRepo.deleteSale(saleId);
+  Future<void> deleteSale(String saleId) => saleRepo.softDeleteSale(saleId);
+  Future<void> softDeleteSale(String saleId) => saleRepo.softDeleteSale(saleId);
+  Future<void> restoreSale(String saleId) => saleRepo.restoreSale(saleId);
+  Future<void> purgeSale(String saleId) => saleRepo.purgeSale(saleId);
 
   // --- Sales Returns ---
-  Future<List<WholesaleSalesReturnModel>> getSalesReturns() => salesReturnRepo.getSalesReturns();
+  Future<List<WholesaleSalesReturnModel>> getSalesReturns({
+    String? invoiceNumber,
+    String? saleId,
+  }) => salesReturnRepo.getSalesReturns(
+    invoiceNumber: invoiceNumber,
+    saleId: saleId,
+  );
   Future<Map<String, dynamic>?> createSalesReturn(WholesaleSalesReturnModel salesReturn) => salesReturnRepo.createSalesReturn(salesReturn);
+  Future<WholesaleInvoiceReturns?> getSaleReturns(String invoiceIdOrNumber) => salesReturnRepo.getSaleReturns(invoiceIdOrNumber);
+  Future<WholesaleSalesReturnSummary?> getSalesReturnSummary() => salesReturnRepo.getSalesReturnSummary();
 
   // --- Purchases CRUD ---
   Future<List<WholesalePurchaseModel>> getPurchases() => purchaseRepo.getPurchases();

@@ -19,8 +19,11 @@ class ApiEndpoints {
 
   // --- Wholesale Sales ---
   static const String wholesaleSales = '/wholesale/sales';
+  static const String wholesaleSalesRecycleBin = '/wholesale/sales/recycle-bin';
   static String wholesaleSaleById(String id) => '/wholesale/sales/$id';
   static String wholesaleSaleCancel(String id) => '/wholesale/sales/$id/cancel';
+  static String wholesaleSaleRestore(String id) => '/wholesale/sales/$id/restore';
+  static String wholesaleSalePurge(String id) => '/wholesale/sales/$id/purge';
 
   // --- Wholesale Sales Returns ---
   static const String wholesaleSalesReturns = '/wholesale/sales-returns';
@@ -44,6 +47,7 @@ class ApiEndpoints {
 
   // --- Wholesale Analytics & Dashboard & CSV ---
   static const String wholesaleDashboardSummary = '/wholesale/dashboard/summary';
+  static const String wholesaleProfitDetails = '/wholesale/profit-details';
   static const String wholesaleReceivablesBreakdown = '/wholesale/receivables/breakdown';
   static const String wholesaleImportCsv = '/wholesale/import-csv';
 

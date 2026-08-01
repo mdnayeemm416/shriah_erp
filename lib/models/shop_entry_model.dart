@@ -88,25 +88,27 @@ class ShopEntryModel extends HiveObject {
   factory ShopEntryModel.fromJson(Map<String, dynamic> json) {
     return ShopEntryModel(
       id: json['id'] as String,
-      shopId: json['shop_id'] as String,
-      cashierId: json['cashier_id'] as String?,
-      entryType: json['entry_type'] as String,
-      posSale: (json['pos_sale'] as num? ?? 0.0).toDouble(),
-      cashSale: (json['cash_sale'] as num? ?? 0.0).toDouble(),
-      bankSale: (json['bank_sale'] as num? ?? 0.0).toDouble(),
-      creditSale: (json['credit_sale'] as num? ?? 0.0).toDouble(),
-      purchaseAmount: (json['purchase_amount'] as num? ?? 0.0).toDouble(),
-      expenseAmount: (json['expense_amount'] as num? ?? 0.0).toDouble(),
-      withdrawAmount: (json['withdraw_amount'] as num? ?? 0.0).toDouble(),
+      shopId: (json['shopId'] ?? json['shop_id']) as String,
+      cashierId: (json['cashierId'] ?? json['cashier_id']) as String?,
+      entryType: (json['entryType'] ?? json['entry_type']) as String,
+      posSale: ((json['posSale'] ?? json['pos_sale']) as num? ?? 0.0).toDouble(),
+      cashSale: ((json['cashSale'] ?? json['cash_sale']) as num? ?? 0.0).toDouble(),
+      bankSale: ((json['bankSale'] ?? json['bank_sale']) as num? ?? 0.0).toDouble(),
+      creditSale: ((json['creditSale'] ?? json['credit_sale']) as num? ?? 0.0).toDouble(),
+      purchaseAmount: ((json['purchaseAmount'] ?? json['purchase_amount']) as num? ?? 0.0).toDouble(),
+      expenseAmount: ((json['expenseAmount'] ?? json['expense_amount']) as num? ?? 0.0).toDouble(),
+      withdrawAmount: ((json['withdrawAmount'] ?? json['withdraw_amount']) as num? ?? 0.0).toDouble(),
       difference: (json['difference'] as num? ?? 0.0).toDouble(),
-      dueReceivable: (json['due_receivable'] as num? ?? 0.0).toDouble(),
+      dueReceivable: ((json['dueReceivable'] ?? json['due_receivable']) as num? ?? 0.0).toDouble(),
       notes: json['notes'] as String?,
-      attachmentUrl: json['attachment_url'] as String?,
-      txnDate: DateTime.parse(json['txn_date'] as String),
-      isDeleted: json['is_deleted'] as bool? ?? false,
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'] as String) 
-          : DateTime.now(),
+      attachmentUrl: (json['assetUrl'] ?? json['attachmentUrl'] ?? json['attachment_url']) as String?,
+      txnDate: DateTime.parse((json['txnDate'] ?? json['txn_date']) as String),
+      isDeleted: (json['isDeleted'] ?? json['is_deleted']) as bool? ?? false,
+      createdAt: json['createdAt'] != null 
+          ? DateTime.parse(json['createdAt'] as String) 
+          : (json['created_at'] != null 
+              ? DateTime.parse(json['created_at'] as String) 
+              : DateTime.now()),
     );
   }
 

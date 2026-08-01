@@ -22,6 +22,17 @@ class ShopModel extends HiveObject {
   @HiveField(5)
   final double? openingCash;
 
+  // Extra statistics from the GET /shops API response
+  final double? cashPosition;
+  final double? expectedBankBalance;
+  final double? totalCash;
+  final double? totalCost;
+  final double? cashSale;
+  final double? bankSale;
+  final double? bankWithdraw;
+  final double? purchaseAmount;
+  final double? expenseAmount;
+
   ShopModel({
     required this.id,
     required this.name,
@@ -29,18 +40,58 @@ class ShopModel extends HiveObject {
     this.isDeleted = false,
     required this.createdAt,
     this.openingCash,
+    this.cashPosition,
+    this.expectedBankBalance,
+    this.totalCash,
+    this.totalCost,
+    this.cashSale,
+    this.bankSale,
+    this.bankWithdraw,
+    this.purchaseAmount,
+    this.expenseAmount,
   });
 
   factory ShopModel.fromJson(Map<String, dynamic> json) {
     return ShopModel(
       id: json['id'] as String,
       name: json['name'] as String,
-      shopType: json['shop_type'] as String?,
-      isDeleted: json['is_deleted'] as bool? ?? false,
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'] as String) 
-          : DateTime.now(),
-      openingCash: (json['opening_cash'] as num?)?.toDouble(),
+      shopType: (json['shopType'] ?? json['shop_type']) as String?,
+      isDeleted: (json['isDeleted'] ?? json['is_deleted']) as bool? ?? false,
+      createdAt: json['createdAt'] != null 
+          ? DateTime.parse(json['createdAt'] as String) 
+          : (json['created_at'] != null 
+              ? DateTime.parse(json['created_at'] as String) 
+              : DateTime.now()),
+      openingCash: (json['openingBalance'] ?? json['opening_balance'] ?? json['opening_cash']) != null
+          ? (json['openingBalance'] ?? json['opening_balance'] ?? json['opening_cash'] as num).toDouble()
+          : null,
+      cashPosition: (json['cashPosition'] ?? json['cash_position']) != null
+          ? (json['cashPosition'] ?? json['cash_position'] as num).toDouble()
+          : null,
+      expectedBankBalance: (json['expectedBankBalance'] ?? json['expected_bank_balance']) != null
+          ? (json['expectedBankBalance'] ?? json['expected_bank_balance'] as num).toDouble()
+          : null,
+      totalCash: (json['totalCash'] ?? json['total_cash']) != null
+          ? (json['totalCash'] ?? json['total_cash'] as num).toDouble()
+          : null,
+      totalCost: (json['totalCost'] ?? json['total_cost']) != null
+          ? (json['totalCost'] ?? json['total_cost'] as num).toDouble()
+          : null,
+      cashSale: (json['cashSale'] ?? json['cash_sale']) != null
+          ? (json['cashSale'] ?? json['cash_sale'] as num).toDouble()
+          : null,
+      bankSale: (json['bankSale'] ?? json['bank_sale']) != null
+          ? (json['bankSale'] ?? json['bank_sale'] as num).toDouble()
+          : null,
+      bankWithdraw: (json['bankWithdraw'] ?? json['bank_withdraw'] ?? json['bank_withdraw']) != null
+          ? (json['bankWithdraw'] ?? json['bank_withdraw'] as num).toDouble()
+          : null,
+      purchaseAmount: (json['purchaseAmount'] ?? json['purchase_amount']) != null
+          ? (json['purchaseAmount'] ?? json['purchase_amount'] as num).toDouble()
+          : null,
+      expenseAmount: (json['expenseAmount'] ?? json['expense_amount']) != null
+          ? (json['expenseAmount'] ?? json['expense_amount'] as num).toDouble()
+          : null,
     );
   }
 
@@ -52,6 +103,15 @@ class ShopModel extends HiveObject {
       'is_deleted': isDeleted,
       'created_at': createdAt.toIso8601String(),
       'opening_cash': openingCash,
+      'cash_position': cashPosition,
+      'expected_bank_balance': expectedBankBalance,
+      'total_cash': totalCash,
+      'total_cost': totalCost,
+      'cash_sale': cashSale,
+      'bank_sale': bankSale,
+      'bank_withdraw': bankWithdraw,
+      'purchase_amount': purchaseAmount,
+      'expense_amount': expenseAmount,
     };
   }
 
@@ -60,6 +120,15 @@ class ShopModel extends HiveObject {
     String? shopType,
     bool? isDeleted,
     double? openingCash,
+    double? cashPosition,
+    double? expectedBankBalance,
+    double? totalCash,
+    double? totalCost,
+    double? cashSale,
+    double? bankSale,
+    double? bankWithdraw,
+    double? purchaseAmount,
+    double? expenseAmount,
   }) {
     return ShopModel(
       id: id,
@@ -68,6 +137,15 @@ class ShopModel extends HiveObject {
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt,
       openingCash: openingCash ?? this.openingCash,
+      cashPosition: cashPosition ?? this.cashPosition,
+      expectedBankBalance: expectedBankBalance ?? this.expectedBankBalance,
+      totalCash: totalCash ?? this.totalCash,
+      totalCost: totalCost ?? this.totalCost,
+      cashSale: cashSale ?? this.cashSale,
+      bankSale: bankSale ?? this.bankSale,
+      bankWithdraw: bankWithdraw ?? this.bankWithdraw,
+      purchaseAmount: purchaseAmount ?? this.purchaseAmount,
+      expenseAmount: expenseAmount ?? this.expenseAmount,
     );
   }
 }

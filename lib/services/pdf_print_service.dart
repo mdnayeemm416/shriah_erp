@@ -313,6 +313,18 @@ class PdfPrintService {
     );
   }
 
+  static Future<Uint8List> generateReceiptImage({
+    required dynamic entry,
+    String? partyName,
+    double dpi = 300,
+  }) async {
+    final pdfBytes = await build80mmReceiptPdf(entry: entry, partyName: partyName);
+    await for (final page in Printing.raster(pdfBytes, dpi: dpi)) {
+      return await page.toPng();
+    }
+    return pdfBytes;
+  }
+
   static Future<Uint8List> build80mmReceiptPdf({
     required dynamic entry,
     String? partyName,

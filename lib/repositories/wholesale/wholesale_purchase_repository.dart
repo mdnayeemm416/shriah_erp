@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints/api_endpoints.dart';
@@ -16,42 +17,63 @@ class WholesalePurchaseRepository {
     final box = Hive.box<WholesalePurchaseModel>(_purchasesBoxName);
     try {
       final remoteList = await _apiClient.getList(ApiEndpoints.wholesalePurchases);
+      await box.clear();
       if (remoteList != null) {
-        await box.clear();
+        final list = <WholesalePurchaseModel>[];
         for (final item in remoteList) {
           if (item is Map<String, dynamic>) {
             final p = WholesalePurchaseModel.fromJson(item);
-            if (p.id.isNotEmpty) {
+            if (p.id.isNotEmpty && !p.isDeleted) {
               await box.put(p.id, p);
+              list.add(p);
             }
           }
         }
+        return list;
       }
-    } catch (_) {}
-    return box.values.where((p) => !p.isDeleted).toList();
+    } catch (e) {
+      debugPrint('WholesalePurchaseRepository getPurchases error: $e');
+      await box.clear();
+    }
+    return [];
+  }
+
+  Future<WholesalePurchaseModel> getPurchaseById(String id) async {
+    try {
+      final responseMap = await _apiClient.getMap(ApiEndpoints.wholesalePurchaseById(id));
+      if (responseMap != null) {
+        return WholesalePurchaseModel.fromJson(responseMap);
+      }
+      throw Exception('Server returned empty data for purchase $id');
+    } catch (e) {
+      debugPrint('WholesalePurchaseRepository getPurchaseById error: $e');
+      rethrow;
+    }
   }
 
   Future<void> savePurchase(WholesalePurchaseModel purchase) async {
     final box = Hive.box<WholesalePurchaseModel>(_purchasesBoxName);
-    final isExisting = box.containsKey(purchase.id);
-    await box.put(purchase.id, purchase);
+    final isExisting = purchase.id.isNotEmpty && box.containsKey(purchase.id);
     try {
       if (isExisting) {
-        await _apiClient.putMap(ApiEndpoints.wholesalePurchaseById(purchase.id), purchase.toJson());
+        await _apiClient.putMap(ApiEndpoints.wholesalePurchaseById(purchase.id), purchase.toApiJson());
       } else {
-        await _apiClient.postMap(ApiEndpoints.wholesalePurchases, purchase.toJson());
+        await _apiClient.postMap(ApiEndpoints.wholesalePurchases, purchase.toApiJson());
       }
-    } catch (_) {}
+      await box.put(purchase.id, purchase);
+    } catch (e) {
+      debugPrint('WholesalePurchaseRepository savePurchase error: $e');
+      rethrow;
+    }
   }
 
   Future<void> deletePurchase(String purchaseId) async {
     final box = Hive.box<WholesalePurchaseModel>(_purchasesBoxName);
-    final purchase = box.get(purchaseId);
-    if (purchase != null) {
-      await box.put(purchaseId, purchase.copyWith(isDeleted: true));
-    }
+    await box.delete(purchaseId);
     try {
       await _apiClient.deleteBool(ApiEndpoints.wholesalePurchaseById(purchaseId));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('WholesalePurchaseRepository deletePurchase error: $e');
+    }
   }
 }

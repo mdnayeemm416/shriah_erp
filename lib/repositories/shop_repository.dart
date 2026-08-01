@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/shop_model.dart';
@@ -116,10 +118,74 @@ class ShopRepository {
 
   Future<void> saveEntry(ShopEntryModel entry) async {
     final box = Hive.box<ShopEntryModel>(_entriesBoxName);
+    
+    // Optimistically write to Hive first
     await box.put(entry.id, entry);
+
     try {
-      await _apiClient.postMap(ApiEndpoints.shopEntries, entry.toJson());
-    } catch (_) {}
+      final attachmentPath = entry.attachmentUrl;
+      bool isLocalFile = false;
+      if (attachmentPath != null && attachmentPath.isNotEmpty) {
+        final file = File(attachmentPath);
+        if (await file.exists()) {
+          isLocalFile = true;
+        }
+      }
+
+      final Map<String, dynamic> formMap = {
+        'id': entry.id,
+        'shopId': entry.shopId,
+        'entryType': entry.entryType,
+        'posSale': entry.posSale,
+        'cashSale': entry.cashSale,
+        'bankSale': entry.bankSale,
+        'creditSale': entry.creditSale,
+        'purchaseAmount': entry.purchaseAmount,
+        'expenseAmount': entry.expenseAmount,
+        'withdrawAmount': entry.withdrawAmount,
+        'txnDate': entry.txnDate.toIso8601String().split('T')[0],
+      };
+
+      if (entry.cashierId != null && entry.cashierId!.isNotEmpty) {
+        formMap['cashierId'] = entry.cashierId;
+      }
+      if (entry.notes != null && entry.notes!.isNotEmpty) {
+        formMap['notes'] = entry.notes;
+      }
+
+      if (isLocalFile && attachmentPath != null) {
+        final fileName = attachmentPath.split(Platform.pathSeparator).last;
+        formMap['file'] = await MultipartFile.fromFile(
+          attachmentPath,
+          filename: fileName,
+        );
+      }
+
+      final formData = FormData.fromMap(formMap);
+
+      final response = await _apiClient.dio.post(
+        ApiEndpoints.shopEntries,
+        data: formData,
+      );
+
+      if ((response.statusCode == 200 || response.statusCode == 201) && response.data is Map) {
+        final body = Map<String, dynamic>.from(response.data as Map);
+        if (body['success'] == true && body['data'] != null) {
+          final responseData = Map<String, dynamic>.from(body['data'] as Map);
+          final assetUrl = (responseData['assetUrl'] ?? 
+                            responseData['attachmentUrl'] ?? 
+                            responseData['attachment_url']) as String?;
+          if (assetUrl != null) {
+            final updatedEntry = entry.copyWith(attachmentUrl: assetUrl);
+            await box.put(updatedEntry.id, updatedEntry);
+          }
+        }
+      }
+    } catch (e) {
+      // In case of error, we log/rethrow so that UI handles it, but local Hive cache remains intact
+      print('Error saving shop entry: $e');
+      rethrow;
+    }
   }
 
   Future<void> deleteEntry(String id) async {

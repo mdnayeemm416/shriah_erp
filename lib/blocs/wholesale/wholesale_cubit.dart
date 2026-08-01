@@ -5,6 +5,7 @@ import '../../models/wholesale_models.dart';
 import '../../models/product_model.dart';
 import '../../repositories/wholesale_repository.dart';
 import '../../repositories/product_repository.dart';
+import '../../repositories/wholesale/wholesale_dashboard_repository.dart';
 
 class WholesaleCubit extends Cubit<WholesaleState> {
   final WholesaleRepository wholesaleRepo;
@@ -15,16 +16,37 @@ class WholesaleCubit extends Cubit<WholesaleState> {
     required this.productRepo,
   }) : super(WholesaleState());
 
-  Future<void> loadAllData() async {
+  Future<WholesaleProfitDetailsModel?> getProfitDetails({
+    String period = 'monthly',
+    String? startDate,
+    String? endDate,
+  }) async {
+    final repo = WholesaleDashboardRepository();
+    return await repo.getProfitDetails(
+      period: period,
+      startDate: startDate,
+      endDate: endDate,
+    );
+  }
+
+  Future<void> loadAllData({DateTime? startDate, DateTime? endDate}) async {
     emit(state.copyWith(loading: true));
     try {
       final customers = await wholesaleRepo.getCustomers();
       final payments = await wholesaleRepo.getPayments();
-      final sales = await wholesaleRepo.getSales();
+      final sales = await wholesaleRepo.getSales(startDate: startDate, endDate: endDate);
       final purchases = await wholesaleRepo.getPurchases();
       final orders = await wholesaleRepo.getOrders();
       final categories = await wholesaleRepo.getCategories();
       final products = await productRepo.getProducts();
+
+      WholesaleSalesReturnSummary? salesReturnSummary;
+      try {
+        salesReturnSummary = await wholesaleRepo.getSalesReturnSummary();
+      } catch (e) {
+        // Gracefully handle backend errors on this specific dashboard metrics endpoint
+        print('Error loading sales return summary: $e');
+      }
 
       emit(state.copyWith(
         customers: customers,
@@ -34,6 +56,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
         orders: orders,
         categories: categories,
         products: products,
+        salesReturnSummary: salesReturnSummary,
         loading: false,
       ));
     } catch (e) {
@@ -119,7 +142,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
     }
   }
 
-  Future<void> createSale({
+  Future<WholesaleSaleModel?> createSale({
     required String customerName,
     required String customerMobile,
     required List<WholesaleSaleItemModel> items,
@@ -144,8 +167,8 @@ class WholesaleCubit extends Cubit<WholesaleState> {
         createdAt: DateTime.now(),
       );
 
-      // Save Sale
-      await wholesaleRepo.saveSale(sale);
+      // Save Sale & capture server-assigned record
+      final savedSale = await wholesaleRepo.saveSale(sale);
 
       // Decrement product stock levels
       for (final item in items) {
@@ -158,22 +181,13 @@ class WholesaleCubit extends Cubit<WholesaleState> {
         }
       }
 
-      final paidAmount = total - discount - dueAmount;
-      if (customerId != null && paidAmount > 0) {
-        final payment = WholesalePaymentModel(
-          id: const Uuid().v4(),
-          customerId: customerId,
-          amount: paidAmount,
-          kind: 'payment_in',
-          notes: 'Partial payment on invoice #${sale.invoiceNumber}',
-          createdAt: DateTime.now(),
-        );
-        await wholesaleRepo.savePayment(payment);
-      }
-
       await loadAllData();
+      return savedSale;
+
+
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
+      rethrow;
     }
   }
 
@@ -216,26 +230,13 @@ class WholesaleCubit extends Cubit<WholesaleState> {
         saleId: saleId,
         invoiceNumber: invoiceNumber,
         customerName: customerName,
+        customerId: customerId,
         refundAmount: refundAmount,
         reason: reason,
         items: returnItems,
       );
 
       await wholesaleRepo.createSalesReturn(salesReturn);
-
-      for (final item in returnItems) {
-        final productId = item['product_id'] as String?;
-        final returnQty = (item['return_qty'] as num? ?? 0).toDouble();
-        if (productId != null && returnQty > 0) {
-          final product = state.products.cast<ProductModel?>().firstWhere(
-                (p) => p != null && p.id == productId,
-                orElse: () => null,
-              );
-          if (product != null) {
-            await productRepo.updateStock(productId, product.stock + returnQty);
-          }
-        }
-      }
 
       if (settlementMethod == 'adjust_due' && customerId != null && refundAmount > 0) {
         final payment = WholesalePaymentModel(
@@ -252,10 +253,44 @@ class WholesaleCubit extends Cubit<WholesaleState> {
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
+      rethrow;
     }
   }
 
-  Future<void> createPurchase({
+  Future<List<WholesaleSalesReturnModel>> getSalesReturns({
+    String? invoiceNumber,
+    String? saleId,
+  }) async {
+    try {
+      return await wholesaleRepo.getSalesReturns(
+        invoiceNumber: invoiceNumber,
+        saleId: saleId,
+      );
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+      rethrow;
+    }
+  }
+
+  Future<WholesaleInvoiceReturns?> getSaleReturns(String invoiceIdOrNumber) async {
+    try {
+      return await wholesaleRepo.getSaleReturns(invoiceIdOrNumber);
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+      rethrow;
+    }
+  }
+
+  Future<WholesaleSalesReturnSummary?> getSalesReturnSummary() async {
+    try {
+      return await wholesaleRepo.getSalesReturnSummary();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+      rethrow;
+    }
+  }
+
+  Future<WholesalePurchaseModel?> createPurchase({
     required String supplierName,
     required List<WholesaleSaleItemModel> items,
     required double total,
@@ -287,12 +322,14 @@ class WholesaleCubit extends Cubit<WholesaleState> {
       }
 
       await loadAllData();
+      return purchase;
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
+      rethrow;
     }
   }
 
-  Future<void> convertOrderToSale({
+  Future<WholesaleSaleModel?> convertOrderToSale({
     required WholesaleOrderModel order,
     required String paymentMethod,
     required double discount,
@@ -325,7 +362,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
       }
 
       // 3. Create a Wholesale Sale
-      await createSale(
+      return await createSale(
         customerName: order.customerName,
         customerMobile: order.customerMobile,
         items: order.items,
@@ -337,6 +374,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
       );
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
+      rethrow;
     }
   }
 
@@ -445,7 +483,52 @@ class WholesaleCubit extends Cubit<WholesaleState> {
 
   Future<void> deleteSale(String saleId) async {
     try {
-      await wholesaleRepo.deleteSale(saleId);
+      await wholesaleRepo.softDeleteSale(saleId);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> softDeleteSale(String saleId) async {
+    try {
+      await wholesaleRepo.softDeleteSale(saleId);
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> restoreSale(String saleId) async {
+    try {
+      final sale = state.sales.cast<WholesaleSaleModel?>().firstWhere(
+            (s) => s != null && s.id == saleId,
+            orElse: () => null,
+          );
+      await wholesaleRepo.restoreSale(saleId);
+
+      // Re-deduct product stock levels on restore (UPDATE products SET stock = stock - qty)
+      if (sale != null) {
+        for (final item in sale.items) {
+          final product = state.products.cast<ProductModel?>().firstWhere(
+                (p) => p != null && p.id == item.productId,
+                orElse: () => null,
+              );
+          if (product != null) {
+            await productRepo.updateStock(product.id, product.stock - item.qty);
+          }
+        }
+      }
+
+      await loadAllData();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> purgeSale(String saleId) async {
+    try {
+      await wholesaleRepo.purgeSale(saleId);
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -458,6 +541,7 @@ class WholesaleCubit extends Cubit<WholesaleState> {
       await loadAllData();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
+      rethrow;
     }
   }
 
@@ -504,5 +588,9 @@ class WholesaleCubit extends Cubit<WholesaleState> {
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
     }
+  }
+
+  void clearError() {
+    emit(state.copyWith(error: ''));
   }
 }

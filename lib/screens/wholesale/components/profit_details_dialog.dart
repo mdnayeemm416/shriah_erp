@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../blocs/wholesale/wholesale_state.dart';
+import '../../../models/wholesale_models.dart';
 
 class ProfitDetailsDialog extends StatefulWidget {
   final String initialPeriod;
@@ -19,11 +20,43 @@ class ProfitDetailsDialog extends StatefulWidget {
 
 class _ProfitDetailsDialogState extends State<ProfitDetailsDialog> {
   late String _selectedPeriod;
+  bool _isLoading = false;
+  WholesaleProfitDetailsModel? _apiDetails;
 
   @override
   void initState() {
     super.initState();
     _selectedPeriod = widget.initialPeriod;
+    _fetchProfitData();
+  }
+
+  String _mapPeriodToApi(String p) {
+    switch (p.toLowerCase().replaceAll('-', '_').replaceAll(' ', '_')) {
+      case 'daily':
+        return 'daily';
+      case 'all_time':
+      case 'alltime':
+        return 'all_time';
+      case 'monthly':
+      default:
+        return 'monthly';
+    }
+  }
+
+  Future<void> _fetchProfitData() async {
+    setState(() => _isLoading = true);
+    final periodParam = _mapPeriodToApi(_selectedPeriod);
+
+    final result = await context.read<WholesaleCubit>().getProfitDetails(
+          period: periodParam,
+        );
+
+    if (mounted) {
+      setState(() {
+        _apiDetails = result;
+        _isLoading = false;
+      });
+    }
   }
 
   Map<String, dynamic> _calculateStats(WholesaleState state) {
@@ -35,6 +68,7 @@ class _ProfitDetailsDialogState extends State<ProfitDetailsDialog> {
     double totalSales = 0.0;
     double totalPurchaseCost = 0.0;
     double totalSoldItems = 0.0;
+    int salesCount = 0;
 
     for (final sale in state.sales) {
       if (sale.status == 'cancelled') continue;
@@ -50,6 +84,7 @@ class _ProfitDetailsDialogState extends State<ProfitDetailsDialog> {
       if (_selectedPeriod == 'All Time' && true) match = true;
 
       if (match) {
+        salesCount++;
         totalSales += sale.total;
         totalPurchaseCost += sale.items.fold(
           0.0,
@@ -60,12 +95,15 @@ class _ProfitDetailsDialogState extends State<ProfitDetailsDialog> {
     }
 
     final netProfit = totalSales - totalPurchaseCost;
+    final profitMarginPercentage = totalSales > 0 ? (netProfit / totalSales) * 100 : 0.0;
 
     return {
+      'salesCount': salesCount,
       'soldItems': totalSoldItems.toInt(),
       'totalSales': totalSales,
       'totalPurchaseCost': totalPurchaseCost,
       'netProfit': netProfit,
+      'profitMarginPercentage': profitMarginPercentage,
     };
   }
 
@@ -80,11 +118,14 @@ class _ProfitDetailsDialogState extends State<ProfitDetailsDialog> {
 
     return BlocBuilder<WholesaleCubit, WholesaleState>(
       builder: (context, state) {
-        final stats = _calculateStats(state);
-        final int soldItems = stats['soldItems'] ?? 0;
-        final double totalSales = stats['totalSales'] ?? 0.0;
-        final double totalPurchaseCost = stats['totalPurchaseCost'] ?? 0.0;
-        final double netProfit = stats['netProfit'] ?? 0.0;
+        final localStats = _calculateStats(state);
+
+        final int salesCount = _apiDetails?.salesCount ?? localStats['salesCount'] ?? 0;
+        final int soldItems = _apiDetails?.totalSoldItems.toInt() ?? localStats['soldItems'] ?? 0;
+        final double totalSales = _apiDetails?.totalSales ?? localStats['totalSales'] ?? 0.0;
+        final double totalPurchaseCost = _apiDetails?.totalPurchaseCost ?? localStats['totalPurchaseCost'] ?? 0.0;
+        final double netProfit = _apiDetails?.netProfit ?? localStats['netProfit'] ?? 0.0;
+        final double profitMarginPercentage = _apiDetails?.profitMarginPercentage ?? localStats['profitMarginPercentage'] ?? 0.0;
 
         return Dialog(
           backgroundColor: bgColor,
@@ -95,181 +136,212 @@ class _ProfitDetailsDialogState extends State<ProfitDetailsDialog> {
           child: Container(
             width: 420,
             padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Profit details',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: Icon(
-                        LucideIcons.x,
-                        color: subtitleColor,
-                        size: 20,
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Divider(height: 1, color: borderColor),
-                const SizedBox(height: 20),
-
-                // Period Pills Switcher
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: Row(
-                    children: ['Daily', 'Monthly', 'All Time'].map((period) {
-                      final isSelected = _selectedPeriod == period;
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedPeriod = period;
-                            });
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? (isDark ? const Color(0xFF1E293B) : Colors.white)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: isSelected
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.06),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      )
-                                    ]
-                                  : [],
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Profit details',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
                             ),
-                            child: Text(
-                              period,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
+                          ),
+                          if (_isLoading) ...[
+                            const SizedBox(width: 10),
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
+                            ),
+                          ],
+                        ],
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: Icon(
+                          LucideIcons.x,
+                          color: subtitleColor,
+                          size: 20,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Divider(height: 1, color: borderColor),
+                  const SizedBox(height: 20),
+
+                  // Period Pills Switcher
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    child: Row(
+                      children: ['Daily', 'Monthly', 'All Time'].map((period) {
+                        final isSelected = _selectedPeriod == period;
+                        return Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedPeriod = period;
+                              });
+                              _fetchProfitData();
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
                                 color: isSelected
-                                    ? textColor
-                                    : (isDark ? Colors.grey[400] : const Color(0xFF64748B)),
+                                    ? (isDark ? const Color(0xFF1E293B) : Colors.white)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(24),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.06),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        )
+                                      ]
+                                    : [],
+                              ),
+                              child: Text(
+                                period,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? textColor
+                                      : (isDark ? Colors.grey[400] : const Color(0xFF64748B)),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Green Realized Profit Hero Banner
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF064E3B).withValues(alpha: 0.5)
-                        : const Color(0xFFECFDF5),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                        );
+                      }).toList(),
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'NET REALIZED PROFIT \u2022 ${_selectedPeriod.toUpperCase()}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
-                          color: isDark ? const Color(0xFF34D399) : const Color(0xFF0F766E),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'SAR ${netProfit.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F9D58),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '(Sale rate \u2013 Purchase rate) \u00d7 Sold qty',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.grey[400] : const Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
+                  const SizedBox(height: 20),
 
-                // Breakdown Card Table
-                Container(
-                  decoration: BoxDecoration(
-                    color: cardBgColor,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: borderColor),
+                  // Green Realized Profit Hero Banner
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF064E3B).withValues(alpha: 0.5)
+                          : const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'NET REALIZED PROFIT • ${_selectedPeriod.toUpperCase()}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                            color: isDark ? const Color(0xFF34D399) : const Color(0xFF0F766E),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'SAR ${netProfit.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F9D58),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Margin: ${profitMarginPercentage.toStringAsFixed(2)}%',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? const Color(0xFF34D399) : const Color(0xFF0F766E),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      _buildRow(
-                        label: 'TOTAL SOLD ITEMS',
-                        value: '$soldItems',
-                        textColor: textColor,
-                        labelColor: subtitleColor,
-                      ),
-                      Divider(height: 1, color: borderColor),
-                      _buildRow(
-                        label: 'TOTAL SALES',
-                        value: 'SAR ${totalSales.toStringAsFixed(0)}',
-                        textColor: textColor,
-                        labelColor: subtitleColor,
-                      ),
-                      Divider(height: 1, color: borderColor),
-                      _buildRow(
-                        label: 'TOTAL PURCHASE COST',
-                        value: 'SAR ${totalPurchaseCost.toStringAsFixed(0)}',
-                        textColor: textColor,
-                        labelColor: subtitleColor,
-                      ),
-                      Divider(height: 1, color: borderColor),
-                      _buildRow(
-                        label: 'NET REALIZED PROFIT',
-                        value: 'SAR ${netProfit.toStringAsFixed(0)}',
-                        textColor: const Color(0xFF0F9D58),
-                        labelColor: subtitleColor,
-                        isBoldValue: true,
-                      ),
-                    ],
+                  const SizedBox(height: 20),
+
+                  // Breakdown Card Table
+                  Container(
+                    decoration: BoxDecoration(
+                      color: cardBgColor,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: borderColor),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildRow(
+                          label: 'SALES COUNT',
+                          value: '$salesCount',
+                          textColor: textColor,
+                          labelColor: subtitleColor,
+                        ),
+                        Divider(height: 1, color: borderColor),
+                        _buildRow(
+                          label: 'TOTAL SOLD ITEMS',
+                          value: '$soldItems',
+                          textColor: textColor,
+                          labelColor: subtitleColor,
+                        ),
+                        Divider(height: 1, color: borderColor),
+                        _buildRow(
+                          label: 'TOTAL SALES',
+                          value: 'SAR ${totalSales.toStringAsFixed(2)}',
+                          textColor: textColor,
+                          labelColor: subtitleColor,
+                        ),
+                        Divider(height: 1, color: borderColor),
+                        _buildRow(
+                          label: 'TOTAL PURCHASE COST',
+                          value: 'SAR ${totalPurchaseCost.toStringAsFixed(2)}',
+                          textColor: textColor,
+                          labelColor: subtitleColor,
+                        ),
+                        Divider(height: 1, color: borderColor),
+                        _buildRow(
+                          label: 'NET REALIZED PROFIT',
+                          value: 'SAR ${netProfit.toStringAsFixed(2)}',
+                          textColor: const Color(0xFF0F9D58),
+                          labelColor: subtitleColor,
+                          isBoldValue: true,
+                        ),
+                        Divider(height: 1, color: borderColor),
+                        _buildRow(
+                          label: 'PROFIT MARGIN',
+                          value: '${profitMarginPercentage.toStringAsFixed(2)}%',
+                          textColor: const Color(0xFF0F9D58),
+                          labelColor: subtitleColor,
+                          isBoldValue: true,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -285,7 +357,7 @@ class _ProfitDetailsDialogState extends State<ProfitDetailsDialog> {
     bool isBoldValue = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

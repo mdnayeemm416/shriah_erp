@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints/api_endpoints.dart';
@@ -16,32 +17,41 @@ class WholesaleOrderRepository {
     final box = Hive.box<WholesaleOrderModel>(_ordersBoxName);
     try {
       final remoteList = await _apiClient.getList(ApiEndpoints.wholesaleOrders);
+      await box.clear();
       if (remoteList != null) {
-        await box.clear();
+        final list = <WholesaleOrderModel>[];
         for (final item in remoteList) {
           if (item is Map<String, dynamic>) {
             final o = WholesaleOrderModel.fromJson(item);
-            if (o.id.isNotEmpty) {
+            if (o.id.isNotEmpty && !o.isDeleted) {
               await box.put(o.id, o);
+              list.add(o);
             }
           }
         }
+        return list;
       }
-    } catch (_) {}
-    return box.values.where((o) => !o.isDeleted).toList();
+    } catch (e) {
+      debugPrint('WholesaleOrderRepository getOrders error: $e');
+      await box.clear();
+    }
+    return [];
   }
 
   Future<void> saveOrder(WholesaleOrderModel order) async {
     final box = Hive.box<WholesaleOrderModel>(_ordersBoxName);
-    final isExisting = box.containsKey(order.id);
-    await box.put(order.id, order);
+    final isExisting = order.id.isNotEmpty && box.containsKey(order.id);
     try {
       if (isExisting) {
         await _apiClient.putMap(ApiEndpoints.wholesaleOrderById(order.id), order.toJson());
       } else {
         await _apiClient.postMap(ApiEndpoints.wholesaleOrders, order.toJson());
       }
-    } catch (_) {}
+      await box.put(order.id, order);
+    } catch (e) {
+      debugPrint('WholesaleOrderRepository saveOrder error: $e');
+      rethrow;
+    }
   }
 
   Future<void> updateOrderStatus(String orderId, String status) async {
@@ -52,17 +62,18 @@ class WholesaleOrderRepository {
     }
     try {
       await _apiClient.postMap(ApiEndpoints.wholesaleOrderStatus(orderId), {'status': status});
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('WholesaleOrderRepository updateOrderStatus error: $e');
+    }
   }
 
   Future<void> deleteOrder(String orderId) async {
     final box = Hive.box<WholesaleOrderModel>(_ordersBoxName);
-    final order = box.get(orderId);
-    if (order != null) {
-      await box.put(orderId, order.copyWith(isDeleted: true));
-    }
+    await box.delete(orderId);
     try {
       await _apiClient.deleteBool(ApiEndpoints.wholesaleOrderById(orderId));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('WholesaleOrderRepository deleteOrder error: $e');
+    }
   }
 }

@@ -31,12 +31,12 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       isDeleted: fields[11] as bool,
       createdAt: fields[12] as DateTime,
       comparePrice: fields[13] as double?,
-      taxRate: (fields[14] as double?) ?? 15.0,
+      taxRate: fields[14] as double?,
       description: fields[15] as String?,
       categoryIds: (fields[16] as List?)?.cast<String>(),
-      isVisibleOnWebsite: (fields[17] as bool?) ?? true,
-      isFeatured: (fields[18] as bool?) ?? false,
-      showStock: (fields[19] as bool?) ?? true,
+      isVisibleOnWebsite: fields[17] as bool,
+      isFeatured: fields[18] as bool,
+      showStock: fields[19] as bool,
       images: (fields[20] as List?)?.cast<String>(),
     );
   }

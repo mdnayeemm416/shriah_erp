@@ -28,6 +28,7 @@ class SalesReturnDialog extends StatefulWidget {
 
 class _SalesReturnDialogState extends State<SalesReturnDialog> {
   int _currentStep = 1;
+  bool _isSaving = false;
 
   // Step 1 State
   WholesaleCustomerModel? _selectedCustomer;
@@ -297,9 +298,11 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                   ] else ...[
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () {
-                          setState(() => _currentStep = 2);
-                        },
+                        onPressed: _isSaving
+                            ? null
+                            : () {
+                                setState(() => _currentStep = 2);
+                              },
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           backgroundColor: cardBg,
@@ -311,14 +314,14 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(LucideIcons.arrowLeft, size: 16, color: textColor),
+                            Icon(LucideIcons.arrowLeft, size: 16, color: _isSaving ? Colors.grey : textColor),
                             const SizedBox(width: 6),
                             Text(
                               'Back',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: textColor,
+                                color: _isSaving ? Colors.grey : textColor,
                               ),
                             ),
                           ],
@@ -329,7 +332,7 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                     Expanded(
                       flex: 2,
                       child: ElevatedButton(
-                        onPressed: () => _confirmReturn(context),
+                        onPressed: _isSaving ? null : () => _confirmReturn(context),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           backgroundColor: accentMint,
@@ -338,12 +341,21 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                             borderRadius: BorderRadius.circular(24),
                           ),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(LucideIcons.check, size: 16, color: Color(0xFF0F172A)),
-                            SizedBox(width: 6),
-                            Text(
+                            _isSaving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF0F172A),
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(LucideIcons.check, size: 16, color: Color(0xFF0F172A)),
+                            const SizedBox(width: 6),
+                            const Text(
                               'Confirm Return',
                               style: TextStyle(
                                 fontSize: 14,
@@ -1051,7 +1063,7 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
 
   // Confirm Return Action
   void _confirmReturn(BuildContext context) async {
-    if (_selectedSale == null) return;
+    if (_selectedSale == null || _isSaving) return;
 
     final sale = _selectedSale!;
     final itemsToReturn = <Map<String, dynamic>>[];
@@ -1081,27 +1093,55 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
 
     final firstReason = itemsToReturn.first['reason'] as String;
 
-    await context.read<WholesaleCubit>().processSalesReturn(
-      saleId: sale.id,
-      invoiceNumber: sale.invoiceNumber.toString(),
-      customerName: _selectedCustomer?.name ?? sale.customerName,
-      customerId: _selectedCustomer?.id ?? sale.customerId,
-      refundAmount: totalRefund,
-      reason: firstReason,
-      settlementMethod: _settlementMethod,
-      returnItems: itemsToReturn,
-      notes: _notesController.text,
-    );
+    setState(() => _isSaving = true);
 
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Sales return for INV-${sale.invoiceNumber} created successfully!'),
-          backgroundColor: const Color(0xFF24B489),
-          behavior: SnackBarBehavior.floating,
-        ),
+    try {
+      await context.read<WholesaleCubit>().processSalesReturn(
+        saleId: sale.id,
+        invoiceNumber: sale.invoiceNumber.toString(),
+        customerName: _selectedCustomer?.name ?? sale.customerName,
+        customerId: _selectedCustomer?.id ?? sale.customerId,
+        refundAmount: totalRefund,
+        reason: firstReason,
+        settlementMethod: _settlementMethod,
+        returnItems: itemsToReturn,
+        notes: _notesController.text,
       );
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sales return for INV-${sale.invoiceNumber} created successfully!'),
+            backgroundColor: const Color(0xFF24B489),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        String msg = e.toString();
+        if (msg.startsWith("Exception: ")) {
+          msg = msg.substring(11);
+        }
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Server Error', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            content: Text(msg),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 }

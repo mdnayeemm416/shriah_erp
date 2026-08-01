@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../core/api/api_client.dart';
 import '../core/api/endpoints/api_endpoints.dart';
@@ -19,22 +20,26 @@ class ProductRepository {
     
     try {
       final remoteData = await _apiClient.getList(ApiEndpoints.products);
+      await box.clear();
       if (remoteData != null) {
-        await box.clear();
+        final list = <ProductModel>[];
         for (final item in remoteData) {
           if (item is Map<String, dynamic>) {
             final p = ProductModel.fromJson(item);
-            if (p.id.isNotEmpty) {
+            if (p.id.isNotEmpty && !p.isDeleted) {
               await box.put(p.id, p);
+              list.add(p);
             }
           }
         }
+        return list;
       }
-    } catch (_) {
-      // Remote fetch failed, fallback to cached Hive box
+    } catch (e) {
+      debugPrint('ProductRepository getProducts error: $e');
+      await box.clear();
     }
 
-    return box.values.where((p) => !p.isDeleted).toList();
+    return [];
   }
 
   Future<List<ProductModel>> getLowStockProducts() async {
@@ -53,8 +58,7 @@ class ProductRepository {
 
   Future<void> saveProduct(ProductModel product) async {
     final box = Hive.box<ProductModel>(_boxName);
-    final isExisting = box.containsKey(product.id);
-    await box.put(product.id, product);
+    final isExisting = product.id.isNotEmpty && box.containsKey(product.id);
 
     try {
       final payload = {
@@ -69,8 +73,10 @@ class ProductRepository {
       } else {
         await _apiClient.postMap(ApiEndpoints.products, payload);
       }
-    } catch (_) {
-      // Saved locally in Hive
+      await box.put(product.id, product);
+    } catch (e) {
+      debugPrint('ProductRepository saveProduct error: $e');
+      rethrow;
     }
   }
 
@@ -79,7 +85,6 @@ class ProductRepository {
     final p = box.get(id);
     if (p != null) {
       final updated = p.copyWith(stock: newStock);
-      await box.put(id, updated);
       try {
         final payload = {
           'name': updated.name,
@@ -89,18 +94,20 @@ class ProductRepository {
           ...updated.toJson(),
         };
         await _apiClient.putMap(ApiEndpoints.productById(id), payload);
-      } catch (_) {}
+        await box.put(id, updated);
+      } catch (e) {
+        debugPrint('ProductRepository updateStock error: $e');
+      }
     }
   }
 
   Future<void> deleteProduct(String id) async {
     final box = Hive.box<ProductModel>(_boxName);
-    final p = box.get(id);
-    if (p != null) {
-      await box.put(id, p.copyWith(isDeleted: true));
-    }
+    await box.delete(id);
     try {
       await _apiClient.deleteBool(ApiEndpoints.productById(id));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ProductRepository deleteProduct error: $e');
+    }
   }
 }

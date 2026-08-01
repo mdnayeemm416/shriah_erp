@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints/api_endpoints.dart';
@@ -16,32 +17,41 @@ class WholesaleCategoryRepository {
     final box = Hive.box<WholesaleCategoryModel>(_categoriesBoxName);
     try {
       final remoteList = await _apiClient.getList(ApiEndpoints.wholesaleCategories);
+      await box.clear();
       if (remoteList != null) {
-        await box.clear();
+        final list = <WholesaleCategoryModel>[];
         for (final item in remoteList) {
           if (item is Map<String, dynamic>) {
             final cat = WholesaleCategoryModel.fromJson(item);
             if (cat.id.isNotEmpty) {
               await box.put(cat.id, cat);
+              list.add(cat);
             }
           }
         }
+        return list..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
       }
-    } catch (_) {}
-    return box.values.toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    } catch (e) {
+      debugPrint('WholesaleCategoryRepository getCategories error: $e');
+      await box.clear();
+    }
+    return [];
   }
 
   Future<void> saveCategory(WholesaleCategoryModel category) async {
     final box = Hive.box<WholesaleCategoryModel>(_categoriesBoxName);
-    final isExisting = box.containsKey(category.id);
-    await box.put(category.id, category);
+    final isExisting = category.id.isNotEmpty && box.containsKey(category.id);
     try {
       if (isExisting) {
         await _apiClient.putMap(ApiEndpoints.wholesaleCategoryById(category.id), category.toJson());
       } else {
         await _apiClient.postMap(ApiEndpoints.wholesaleCategories, category.toJson());
       }
-    } catch (_) {}
+      await box.put(category.id, category);
+    } catch (e) {
+      debugPrint('WholesaleCategoryRepository saveCategory error: $e');
+      rethrow;
+    }
   }
 
   Future<void> deleteCategory(String categoryId) async {
@@ -49,6 +59,8 @@ class WholesaleCategoryRepository {
     await box.delete(categoryId);
     try {
       await _apiClient.deleteBool(ApiEndpoints.wholesaleCategoryById(categoryId));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('WholesaleCategoryRepository deleteCategory error: $e');
+    }
   }
 }

@@ -114,11 +114,24 @@ class ApiClient {
       final response = await get(path, queryParameters: queryParameters);
       if (response.statusCode == 200 && response.data is Map) {
         final body = response.data as Map;
-        if (body['success'] == true && body['data'] is List) {
-          return body['data'] as List<dynamic>;
+        if (body['success'] == true) {
+          if (body['data'] is List) {
+            return body['data'] as List<dynamic>;
+          }
+        } else {
+          throw Exception(body['message'] ?? 'API request failed');
         }
+      } else if (response.data is Map) {
+        final body = response.data as Map;
+        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
       }
-    } catch (_) {}
+    } on DioException catch (e) {
+      if (e.response?.data is Map) {
+        final body = Map<String, dynamic>.from(e.response!.data as Map);
+        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+      }
+      rethrow;
+    }
     return null;
   }
 
@@ -127,11 +140,24 @@ class ApiClient {
       final response = await get(path, queryParameters: queryParameters);
       if (response.statusCode == 200 && response.data is Map) {
         final body = response.data as Map;
-        if (body['success'] == true && body['data'] is Map) {
-          return Map<String, dynamic>.from(body['data'] as Map);
+        if (body['success'] == true) {
+          if (body['data'] is Map) {
+            return Map<String, dynamic>.from(body['data'] as Map);
+          }
+        } else {
+          throw Exception(body['message'] ?? 'API request failed');
         }
+      } else if (response.data is Map) {
+        final body = response.data as Map;
+        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
       }
-    } catch (_) {}
+    } on DioException catch (e) {
+      if (e.response?.data is Map) {
+        final body = Map<String, dynamic>.from(e.response!.data as Map);
+        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+      }
+      rethrow;
+    }
     return null;
   }
 
@@ -139,9 +165,22 @@ class ApiClient {
     try {
       final response = await post(path, data: data);
       if ((response.statusCode == 200 || response.statusCode == 201) && response.data is Map) {
-        return Map<String, dynamic>.from(response.data as Map);
+        final body = Map<String, dynamic>.from(response.data as Map);
+        if (body['success'] == false) {
+          throw Exception(body['message'] ?? 'API request failed');
+        }
+        return body;
+      } else if (response.data is Map) {
+        final body = Map<String, dynamic>.from(response.data as Map);
+        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
       }
-    } catch (_) {}
+    } on DioException catch (e) {
+      if (e.response?.data is Map) {
+        final body = Map<String, dynamic>.from(e.response!.data as Map);
+        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+      }
+      rethrow;
+    }
     return null;
   }
 
@@ -149,18 +188,47 @@ class ApiClient {
     try {
       final response = await put(path, data: data);
       if ((response.statusCode == 200 || response.statusCode == 201) && response.data is Map) {
-        return Map<String, dynamic>.from(response.data as Map);
+        final body = Map<String, dynamic>.from(response.data as Map);
+        if (body['success'] == false) {
+          throw Exception(body['message'] ?? 'API request failed');
+        }
+        return body;
+      } else if (response.data is Map) {
+        final body = Map<String, dynamic>.from(response.data as Map);
+        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
       }
-    } catch (_) {}
+    } on DioException catch (e) {
+      if (e.response?.data is Map) {
+        final body = Map<String, dynamic>.from(e.response!.data as Map);
+        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+      }
+      rethrow;
+    }
     return null;
   }
 
   Future<bool> deleteBool(String path) async {
     try {
       final response = await delete(path);
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
+      if (response.statusCode == 200) {
+        if (response.data is Map) {
+          final body = response.data as Map;
+          if (body['success'] == false) {
+            throw Exception(body['message'] ?? 'Delete request failed');
+          }
+        }
+        return true;
+      } else if (response.data is Map) {
+        final body = response.data as Map;
+        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      if (e.response?.data is Map) {
+        final body = Map<String, dynamic>.from(e.response!.data as Map);
+        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+      }
+      rethrow;
     }
+    return false;
   }
 }
