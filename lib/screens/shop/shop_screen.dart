@@ -4841,34 +4841,122 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                     const SizedBox(height: 12),
 
                     // 4. PER-SHOP SUMMARY CARDS CAROUSEL
-                    SizedBox(
-                      height: 245,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: shopCards.length,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(width: 12),
-                        itemBuilder: (context, idx) {
-                          final summary = shopCards[idx];
-                          final isSelected = _shopFilter == summary.shop.id;
-                          return _buildShopSummaryCard(
-                            summary: summary,
-                            isSelected: isSelected,
-                            isDark: isDark,
-                            onTap: () {
-                              setState(() {
-                                if (_shopFilter == summary.shop.id) {
-                                  _shopFilter = 'all';
-                                } else {
-                                  _shopFilter = summary.shop.id;
-                                }
-                                _visibleCount = 20;
-                              });
-                            },
-                          );
-                        },
-                      ),
-                    ),
+                    shopCards.isEmpty
+                        ? Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 36,
+                              horizontal: 24,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark ? AppColors.cardDark : Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppColors.borderDark
+                                    : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0D9488)
+                                        .withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    LucideIcons.store,
+                                    size: 32,
+                                    color: Color(0xFF0D9488),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No Shops Available',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Create a shop to start logging sales, purchases, and tracking cash flow.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: isDark
+                                        ? const Color(0xFF94A3B8)
+                                        : const Color(0xFF64748B),
+                                    height: 1.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    _showManageShops();
+                                  },
+                                  icon: const Icon(
+                                    LucideIcons.plus,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                  label: const Text(
+                                    'Add Shop',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0D9488),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : SizedBox(
+                            height: 245,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: shopCards.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(width: 12),
+                              itemBuilder: (context, idx) {
+                                final summary = shopCards[idx];
+                                final isSelected =
+                                    _shopFilter == summary.shop.id;
+                                return _buildShopSummaryCard(
+                                  summary: summary,
+                                  isSelected: isSelected,
+                                  isDark: isDark,
+                                  onTap: () {
+                                    setState(() {
+                                      if (_shopFilter == summary.shop.id) {
+                                        _shopFilter = 'all';
+                                      } else {
+                                        _shopFilter = summary.shop.id;
+                                      }
+                                      _visibleCount = 20;
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                          ),
                     const SizedBox(height: 16),
 
                     // 5. SELECTED SHOP BANNER (e.g. Main Store · This Month)

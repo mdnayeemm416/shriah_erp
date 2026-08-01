@@ -10,8 +10,15 @@ class CashSnapshotRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    Hive.registerAdapter(CashHolderModelAdapter());
-    Hive.registerAdapter(CashInHandSnapshotModelAdapter());
+    final holderAdapter = CashHolderModelAdapter();
+    final snapshotAdapter = CashInHandSnapshotModelAdapter();
+
+    if (!Hive.isAdapterRegistered(holderAdapter.typeId)) {
+      Hive.registerAdapter(holderAdapter);
+    }
+    if (!Hive.isAdapterRegistered(snapshotAdapter.typeId)) {
+      Hive.registerAdapter(snapshotAdapter);
+    }
 
     await Hive.openBox<CashInHandSnapshotModel>(_snapshotsBoxName);
     await Hive.openBox<CashHolderModel>(_holdersBoxName);

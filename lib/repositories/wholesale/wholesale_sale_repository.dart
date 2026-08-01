@@ -10,8 +10,15 @@ class WholesaleSaleRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    if (!Hive.isAdapterRegistered(17)) Hive.registerAdapter(WholesaleSaleItemModelAdapter());
-    if (!Hive.isAdapterRegistered(16)) Hive.registerAdapter(WholesaleSaleModelAdapter());
+    final itemAdapter = WholesaleSaleItemModelAdapter();
+    final saleAdapter = WholesaleSaleModelAdapter();
+
+    if (!Hive.isAdapterRegistered(itemAdapter.typeId)) {
+      Hive.registerAdapter(itemAdapter);
+    }
+    if (!Hive.isAdapterRegistered(saleAdapter.typeId)) {
+      Hive.registerAdapter(saleAdapter);
+    }
     await Hive.openBox<WholesaleSaleModel>(_salesBoxName);
   }
 

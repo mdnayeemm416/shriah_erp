@@ -46,116 +46,132 @@ import 'blocs/auth/auth_state.dart';
 void main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
-  await Hive.initFlutter();
-  await ApiClient().init();
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-    ),
-  );
 
-  // 1. Instantiate Repositories
-  final authRepo = AuthRepository();
-  final shopRepo = ShopRepository();
-  final employeeRepo = EmployeeRepository();
-  final productRepo = ProductRepository();
-  final companyRepo = CompanyTransactionRepository();
-  final cashSnapshotRepo = CashSnapshotRepository();
-  final dailyClosingRepo = DailyClosingRepository();
-  final employeeExpenseRepo = EmployeeExpenseRepository();
-  final priceCompareRepo = PriceCompareRepository();
-  final wholesaleRepo = WholesaleRepository();
-  final openingBalanceRepo = OpeningBalanceRepository();
-
-  // 2. Initialize Hive schemas & API sync repositories
-  await shopRepo.initialize();
-  await employeeRepo.initialize();
-  await productRepo.initialize();
-  await companyRepo.initialize();
-  await cashSnapshotRepo.initialize();
-  await dailyClosingRepo.initialize();
-  await employeeExpenseRepo.initialize();
-  await priceCompareRepo.initialize();
-  await wholesaleRepo.initialize();
-  await openingBalanceRepo.initialize();
-
-  runApp(
-    MultiRepositoryProvider(
-      providers: [
-        RepositoryProvider<AuthRepository>.value(value: authRepo),
-        RepositoryProvider<ShopRepository>.value(value: shopRepo),
-        RepositoryProvider<EmployeeRepository>.value(value: employeeRepo),
-        RepositoryProvider<ProductRepository>.value(value: productRepo),
-        RepositoryProvider<CompanyTransactionRepository>.value(
-          value: companyRepo,
-        ),
-        RepositoryProvider<CashSnapshotRepository>.value(
-          value: cashSnapshotRepo,
-        ),
-        RepositoryProvider<DailyClosingRepository>.value(
-          value: dailyClosingRepo,
-        ),
-        RepositoryProvider<EmployeeExpenseRepository>.value(
-          value: employeeExpenseRepo,
-        ),
-        RepositoryProvider<PriceCompareRepository>.value(
-          value: priceCompareRepo,
-        ),
-        RepositoryProvider<WholesaleRepository>.value(value: wholesaleRepo),
-        RepositoryProvider<OpeningBalanceRepository>.value(value: openingBalanceRepo),
-        RepositoryProvider<WholesaleCustomerRepository>.value(value: wholesaleRepo.customerRepo),
-        RepositoryProvider<WholesaleCategoryRepository>.value(value: wholesaleRepo.categoryRepo),
-        RepositoryProvider<WholesaleSaleRepository>.value(value: wholesaleRepo.saleRepo),
-        RepositoryProvider<WholesalePurchaseRepository>.value(value: wholesaleRepo.purchaseRepo),
-        RepositoryProvider<WholesaleOrderRepository>.value(value: wholesaleRepo.orderRepo),
-        RepositoryProvider<WholesalePaymentRepository>.value(value: wholesaleRepo.paymentRepo),
-        RepositoryProvider<WholesaleSalesReturnRepository>.value(value: wholesaleRepo.salesReturnRepo),
-        RepositoryProvider<WholesaleDashboardRepository>.value(value: wholesaleRepo.dashboardRepo),
-      ],
-      child: MultiBlocProvider(
-        providers: [
-          BlocProvider<ThemeCubit>(create: (_) => ThemeCubit()),
-          BlocProvider<LanguageCubit>(create: (_) => LanguageCubit()),
-          BlocProvider<WorkingDateCubit>(create: (_) => WorkingDateCubit()),
-          BlocProvider<AuthCubit>(create: (context) => AuthCubit(authRepo)),
-          BlocProvider<ShopBloc>(
-            create: (context) => ShopBloc(shopRepo)..add(LoadShops()),
-          ),
-          BlocProvider<EmployeeBloc>(
-            create: (context) =>
-                EmployeeBloc(employeeRepo)..add(LoadEmployeesList()),
-          ),
-          BlocProvider<DailyClosingCubit>(
-            create: (context) => DailyClosingCubit(
-              dailyClosingRepo: context.read<DailyClosingRepository>(),
-              shopRepo: context.read<ShopRepository>(),
-              employeeRepo: context.read<EmployeeRepository>(),
-              companyRepo: context.read<CompanyTransactionRepository>(),
-            ),
-          ),
-          BlocProvider<MyExpensesCubit>(
-            create: (context) => MyExpensesCubit(
-              expenseRepo: context.read<EmployeeExpenseRepository>(),
-              employeeRepo: context.read<EmployeeRepository>(),
-            ),
-          ),
-          BlocProvider<PriceCompareCubit>(
-            create: (context) => PriceCompareCubit(
-              compareRepo: context.read<PriceCompareRepository>(),
-            )..loadProducts(),
-          ),
-          BlocProvider<WholesaleCubit>(
-            create: (context) => WholesaleCubit(
-              wholesaleRepo: context.read<WholesaleRepository>(),
-              productRepo: context.read<ProductRepository>(),
-            )..loadAllData(),
-          ),
-        ],
-        child: const MyApp(),
+  try {
+    await Hive.initFlutter();
+    await ApiClient().init();
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
       ),
-    ),
-  );
+    );
+
+    // 1. Instantiate Repositories
+    final authRepo = AuthRepository();
+    final shopRepo = ShopRepository();
+    final employeeRepo = EmployeeRepository();
+    final productRepo = ProductRepository();
+    final companyRepo = CompanyTransactionRepository();
+    final cashSnapshotRepo = CashSnapshotRepository();
+    final dailyClosingRepo = DailyClosingRepository();
+    final employeeExpenseRepo = EmployeeExpenseRepository();
+    final priceCompareRepo = PriceCompareRepository();
+    final wholesaleRepo = WholesaleRepository();
+    final openingBalanceRepo = OpeningBalanceRepository();
+
+    // 2. Initialize Hive schemas & API sync repositories
+    await shopRepo.initialize();
+    await employeeRepo.initialize();
+    await productRepo.initialize();
+    await companyRepo.initialize();
+    await cashSnapshotRepo.initialize();
+    await dailyClosingRepo.initialize();
+    await employeeExpenseRepo.initialize();
+    await priceCompareRepo.initialize();
+    await wholesaleRepo.initialize();
+    await openingBalanceRepo.initialize();
+
+    runApp(
+      MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<AuthRepository>.value(value: authRepo),
+          RepositoryProvider<ShopRepository>.value(value: shopRepo),
+          RepositoryProvider<EmployeeRepository>.value(value: employeeRepo),
+          RepositoryProvider<ProductRepository>.value(value: productRepo),
+          RepositoryProvider<CompanyTransactionRepository>.value(
+            value: companyRepo,
+          ),
+          RepositoryProvider<CashSnapshotRepository>.value(
+            value: cashSnapshotRepo,
+          ),
+          RepositoryProvider<DailyClosingRepository>.value(
+            value: dailyClosingRepo,
+          ),
+          RepositoryProvider<EmployeeExpenseRepository>.value(
+            value: employeeExpenseRepo,
+          ),
+          RepositoryProvider<PriceCompareRepository>.value(
+            value: priceCompareRepo,
+          ),
+          RepositoryProvider<WholesaleRepository>.value(value: wholesaleRepo),
+          RepositoryProvider<OpeningBalanceRepository>.value(value: openingBalanceRepo),
+          RepositoryProvider<WholesaleCustomerRepository>.value(value: wholesaleRepo.customerRepo),
+          RepositoryProvider<WholesaleCategoryRepository>.value(value: wholesaleRepo.categoryRepo),
+          RepositoryProvider<WholesaleSaleRepository>.value(value: wholesaleRepo.saleRepo),
+          RepositoryProvider<WholesalePurchaseRepository>.value(value: wholesaleRepo.purchaseRepo),
+          RepositoryProvider<WholesaleOrderRepository>.value(value: wholesaleRepo.orderRepo),
+          RepositoryProvider<WholesalePaymentRepository>.value(value: wholesaleRepo.paymentRepo),
+          RepositoryProvider<WholesaleSalesReturnRepository>.value(value: wholesaleRepo.salesReturnRepo),
+          RepositoryProvider<WholesaleDashboardRepository>.value(value: wholesaleRepo.dashboardRepo),
+        ],
+        child: MultiBlocProvider(
+          providers: [
+            BlocProvider<ThemeCubit>(create: (_) => ThemeCubit()),
+            BlocProvider<LanguageCubit>(create: (_) => LanguageCubit()),
+            BlocProvider<WorkingDateCubit>(create: (_) => WorkingDateCubit()),
+            BlocProvider<AuthCubit>(create: (context) => AuthCubit(authRepo)),
+            BlocProvider<ShopBloc>(
+              create: (context) => ShopBloc(shopRepo)..add(LoadShops()),
+            ),
+            BlocProvider<EmployeeBloc>(
+              create: (context) =>
+                  EmployeeBloc(employeeRepo)..add(LoadEmployeesList()),
+            ),
+            BlocProvider<DailyClosingCubit>(
+              create: (context) => DailyClosingCubit(
+                dailyClosingRepo: context.read<DailyClosingRepository>(),
+                shopRepo: context.read<ShopRepository>(),
+                employeeRepo: context.read<EmployeeRepository>(),
+                companyRepo: context.read<CompanyTransactionRepository>(),
+              ),
+            ),
+            BlocProvider<MyExpensesCubit>(
+              create: (context) => MyExpensesCubit(
+                expenseRepo: context.read<EmployeeExpenseRepository>(),
+                employeeRepo: context.read<EmployeeRepository>(),
+              ),
+            ),
+            BlocProvider<PriceCompareCubit>(
+              create: (context) => PriceCompareCubit(
+                compareRepo: context.read<PriceCompareRepository>(),
+              )..loadProducts(),
+            ),
+            BlocProvider<WholesaleCubit>(
+              create: (context) => WholesaleCubit(
+                wholesaleRepo: context.read<WholesaleRepository>(),
+                productRepo: context.read<ProductRepository>(),
+              )..loadAllData(),
+            ),
+          ],
+          child: const MyApp(),
+        ),
+      ),
+    );
+  } catch (e, stack) {
+    debugPrint('App Initialization Crash: $e\n$stack');
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData.dark(),
+        home: InitializationErrorScreen(error: e, stackTrace: stack),
+      ),
+    );
+    // Ensure native splash screen is removed so error screen shows up
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -458,6 +474,212 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Beautiful Diagnostic Error Screen for Startup Crashes ───────────────────
+class InitializationErrorScreen extends StatelessWidget {
+  final Object error;
+  final StackTrace stackTrace;
+
+  const InitializationErrorScreen({
+    super.key,
+    required this.error,
+    required this.stackTrace,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF060913), Color(0xFF09161B), Color(0xFF1E0C0C)],
+            stops: [0.0, 0.5, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Glowing Warning Icon
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.red.withOpacity(0.3), width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.2),
+                        blurRadius: 30,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.redAccent,
+                    size: 64,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Initialization Failure',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'The application was unable to start because of a database or initialization issue.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Error card
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.1),
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'ERROR MESSAGE:',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          SelectableText(
+                            error.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'STACK TRACE:',
+                            style: TextStyle(
+                              color: Colors.amberAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          SelectableText(
+                            stackTrace.toString(),
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Actions row
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            await Hive.deleteFromDisk();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('App storage reset! Please restart the app.'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to clear database: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Reset & Clear DB'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(
+                            text: 'Error: $error\n\nStackTrace:\n$stackTrace',
+                          ));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Error details copied to clipboard'),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.copy_rounded),
+                        label: const Text('Copy Details'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

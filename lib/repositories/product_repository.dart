@@ -9,8 +9,9 @@ class ProductRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    if (!Hive.isAdapterRegistered(10)) {
-      Hive.registerAdapter(ProductModelAdapter());
+    final adapter = ProductModelAdapter();
+    if (!Hive.isAdapterRegistered(adapter.typeId)) {
+      Hive.registerAdapter(adapter);
     }
     await Hive.openBox<ProductModel>(_boxName);
   }

@@ -8,7 +8,10 @@ class EmployeeExpenseRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    Hive.registerAdapter(EmployeeExpenseModelAdapter());
+    final adapter = EmployeeExpenseModelAdapter();
+    if (!Hive.isAdapterRegistered(adapter.typeId)) {
+      Hive.registerAdapter(adapter);
+    }
     await Hive.openBox<EmployeeExpenseModel>(_boxName);
   }
 

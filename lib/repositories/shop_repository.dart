@@ -16,9 +16,19 @@ class ShopRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    if (!Hive.isAdapterRegistered(11)) Hive.registerAdapter(ShopModelAdapter());
-    if (!Hive.isAdapterRegistered(12)) Hive.registerAdapter(CashierModelAdapter());
-    if (!Hive.isAdapterRegistered(13)) Hive.registerAdapter(ShopEntryModelAdapter());
+    final shopAdapter = ShopModelAdapter();
+    final cashierAdapter = CashierModelAdapter();
+    final shopEntryAdapter = ShopEntryModelAdapter();
+
+    if (!Hive.isAdapterRegistered(shopAdapter.typeId)) {
+      Hive.registerAdapter(shopAdapter);
+    }
+    if (!Hive.isAdapterRegistered(cashierAdapter.typeId)) {
+      Hive.registerAdapter(cashierAdapter);
+    }
+    if (!Hive.isAdapterRegistered(shopEntryAdapter.typeId)) {
+      Hive.registerAdapter(shopEntryAdapter);
+    }
 
     await Hive.openBox<ShopModel>(_shopsBoxName);
     await Hive.openBox<CashierModel>(_cashiersBoxName);

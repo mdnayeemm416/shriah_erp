@@ -8,7 +8,10 @@ class DailyClosingRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    Hive.registerAdapter(DailyClosingModelAdapter());
+    final adapter = DailyClosingModelAdapter();
+    if (!Hive.isAdapterRegistered(adapter.typeId)) {
+      Hive.registerAdapter(adapter);
+    }
     await Hive.openBox<DailyClosingModel>(_boxName);
   }
 

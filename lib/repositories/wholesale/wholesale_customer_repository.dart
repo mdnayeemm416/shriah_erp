@@ -9,7 +9,10 @@ class WholesaleCustomerRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    if (!Hive.isAdapterRegistered(14)) Hive.registerAdapter(WholesaleCustomerModelAdapter());
+    final adapter = WholesaleCustomerModelAdapter();
+    if (!Hive.isAdapterRegistered(adapter.typeId)) {
+      Hive.registerAdapter(adapter);
+    }
     await Hive.openBox<WholesaleCustomerModel>(_customersBoxName);
   }
 

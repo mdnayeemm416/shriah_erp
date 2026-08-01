@@ -11,8 +11,15 @@ class EmployeeRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    if (!Hive.isAdapterRegistered(21)) Hive.registerAdapter(EmployeeModelAdapter());
-    if (!Hive.isAdapterRegistered(22)) Hive.registerAdapter(EmployeeEntryModelAdapter());
+    final employeeAdapter = EmployeeModelAdapter();
+    final employeeEntryAdapter = EmployeeEntryModelAdapter();
+
+    if (!Hive.isAdapterRegistered(employeeAdapter.typeId)) {
+      Hive.registerAdapter(employeeAdapter);
+    }
+    if (!Hive.isAdapterRegistered(employeeEntryAdapter.typeId)) {
+      Hive.registerAdapter(employeeEntryAdapter);
+    }
     await Hive.openBox<EmployeeModel>(_employeesBoxName);
     await Hive.openBox<EmployeeEntryModel>(_entriesBoxName);
   }

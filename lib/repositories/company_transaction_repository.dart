@@ -9,8 +9,9 @@ class CompanyTransactionRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    if (!Hive.isAdapterRegistered(25)) {
-      Hive.registerAdapter(CompanyTransactionModelAdapter());
+    final adapter = CompanyTransactionModelAdapter();
+    if (!Hive.isAdapterRegistered(adapter.typeId)) {
+      Hive.registerAdapter(adapter);
     }
     await Hive.openBox<CompanyTransactionModel>(_boxName);
   }

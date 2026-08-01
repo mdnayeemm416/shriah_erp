@@ -9,8 +9,16 @@ class PriceCompareRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    Hive.registerAdapter(PriceCompareProductModelAdapter());
-    Hive.registerAdapter(PriceCompareRecordModelAdapter());
+    final productAdapter = PriceCompareProductModelAdapter();
+    final recordAdapter = PriceCompareRecordModelAdapter();
+
+    if (!Hive.isAdapterRegistered(productAdapter.typeId)) {
+      Hive.registerAdapter(productAdapter);
+    }
+    if (!Hive.isAdapterRegistered(recordAdapter.typeId)) {
+      Hive.registerAdapter(recordAdapter);
+    }
+
     await Hive.openBox<PriceCompareProductModel>(_productsBoxName);
     await Hive.openBox<PriceCompareRecordModel>(_recordsBoxName);
   }

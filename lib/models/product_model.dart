@@ -1,70 +1,26 @@
 import 'package:hive/hive.dart';
 
-part 'product_model.g.dart';
-
-@HiveType(typeId: 7)
 class ProductModel extends HiveObject {
-  @HiveField(0)
   final String id;
-
-  @HiveField(1)
   final String name;
-
-  @HiveField(2)
   final String? nameAr;
-
-  @HiveField(3)
   final String? nameBn;
-
-  @HiveField(4)
   final String? barcode;
-
-  @HiveField(5)
   final String? itemCode;
-
-  @HiveField(6)
   final double price;
-
-  @HiveField(7)
   final double purchasePrice;
-
-  @HiveField(8)
   final double stock;
-
-  @HiveField(9)
   final double minStock;
-
-  @HiveField(10)
   final String? imageUrl;
-
-  @HiveField(11)
   final bool isDeleted;
-
-  @HiveField(12)
   final DateTime createdAt;
-
-  @HiveField(13)
   final double? comparePrice;
-
-  @HiveField(14)
   final double? taxRate;
-
-  @HiveField(15)
   final String? description;
-
-  @HiveField(16)
   final List<String>? categoryIds;
-
-  @HiveField(17)
   final bool isVisibleOnWebsite;
-
-  @HiveField(18)
   final bool isFeatured;
-
-  @HiveField(19)
   final bool showStock;
-
-  @HiveField(20)
   final List<String>? images;
 
   ProductModel({
@@ -190,4 +146,98 @@ class ProductModel extends HiveObject {
       images: images ?? this.images,
     );
   }
+}
+
+class ProductModelAdapter extends TypeAdapter<ProductModel> {
+  @override
+  final int typeId = 7;
+
+  @override
+  ProductModel read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return ProductModel(
+      id: fields[0] as String,
+      name: fields[1] as String,
+      nameAr: fields[2] as String?,
+      nameBn: fields[3] as String?,
+      barcode: fields[4] as String?,
+      itemCode: fields[5] as String?,
+      price: (fields[6] as num).toDouble(),
+      purchasePrice: (fields[7] as num).toDouble(),
+      stock: (fields[8] as num).toDouble(),
+      minStock: (fields[9] as num).toDouble(),
+      imageUrl: fields[10] as String?,
+      isDeleted: fields[11] as bool? ?? false,
+      createdAt: fields[12] as DateTime,
+      comparePrice: (fields[13] as num?)?.toDouble(),
+      taxRate: (fields[14] as num?)?.toDouble() ?? 15.0,
+      description: fields[15] as String?,
+      categoryIds: (fields[16] as List?)?.cast<String>(),
+      isVisibleOnWebsite: (fields[17] as bool?) ?? true,
+      isFeatured: (fields[18] as bool?) ?? false,
+      showStock: (fields[19] as bool?) ?? true,
+      images: (fields[20] as List?)?.cast<String>(),
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, ProductModel obj) {
+    writer
+      ..writeByte(21)
+      ..writeByte(0)
+      ..write(obj.id)
+      ..writeByte(1)
+      ..write(obj.name)
+      ..writeByte(2)
+      ..write(obj.nameAr)
+      ..writeByte(3)
+      ..write(obj.nameBn)
+      ..writeByte(4)
+      ..write(obj.barcode)
+      ..writeByte(5)
+      ..write(obj.itemCode)
+      ..writeByte(6)
+      ..write(obj.price)
+      ..writeByte(7)
+      ..write(obj.purchasePrice)
+      ..writeByte(8)
+      ..write(obj.stock)
+      ..writeByte(9)
+      ..write(obj.minStock)
+      ..writeByte(10)
+      ..write(obj.imageUrl)
+      ..writeByte(11)
+      ..write(obj.isDeleted)
+      ..writeByte(12)
+      ..write(obj.createdAt)
+      ..writeByte(13)
+      ..write(obj.comparePrice)
+      ..writeByte(14)
+      ..write(obj.taxRate)
+      ..writeByte(15)
+      ..write(obj.description)
+      ..writeByte(16)
+      ..write(obj.categoryIds)
+      ..writeByte(17)
+      ..write(obj.isVisibleOnWebsite)
+      ..writeByte(18)
+      ..write(obj.isFeatured)
+      ..writeByte(19)
+      ..write(obj.showStock)
+      ..writeByte(20)
+      ..write(obj.images);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ProductModelAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
 }
