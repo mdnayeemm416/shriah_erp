@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../blocs/wholesale/wholesale_cubit.dart';
 import '../../../models/wholesale_models.dart';
+import '../../../services/pdf_print_service.dart';
 import '../wholesale_transaction_dialog.dart';
 import 'edit_transaction_dialog.dart';
 import 'sales_return_dialog.dart';
@@ -225,6 +226,26 @@ class TransactionDetailDialog extends StatelessWidget {
                       color: textColor,
                     ),
                   ),
+                  // InkWell(
+                  //   onTap: () => _showDeleteConfirm(context),
+                  //   borderRadius: BorderRadius.circular(20),
+                  //   child: Padding(
+                  //     padding: const EdgeInsets.all(6.0),
+                  //     child: Icon(LucideIcons.trash2, color: Colors.redAccent.withValues(alpha: 0.8), size: 18),
+                  //   ),
+                  // ),
+                  // const SizedBox(width: 4),
+                  // if (partyMobile.isNotEmpty) ...[
+                  //   InkWell(
+                  //     onTap: () => _shareToWhatsApp(partyMobile, buildShareReceiptText()),
+                  //     borderRadius: BorderRadius.circular(20),
+                  //     child: const Padding(
+                  //       padding: EdgeInsets.all(6.0),
+                  //       child: Icon(LucideIcons.messageSquare, color: Color(0xFF25D366), size: 18),
+                  //     ),
+                  //   ),
+                  //   const SizedBox(width: 4),
+                  // ],
                   InkWell(
                     onTap: () => Navigator.pop(context),
                     borderRadius: BorderRadius.circular(20),
@@ -296,26 +317,69 @@ class TransactionDetailDialog extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: borderColor),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'CUSTOMER',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.8,
-                              color: labelColor,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'CUSTOMER',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.8,
+                                  color: labelColor,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                partyName,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            partyName,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
+                          Row(
+                            children: [
+                              if (paymentMethod.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: primaryColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    paymentMethod.toUpperCase(),
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              if (saleStatus.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (saleStatus == 'cancelled' ? Colors.red : Colors.blue).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    saleStatus.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: saleStatus == 'cancelled' ? Colors.red : Colors.blue,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),
@@ -431,6 +495,41 @@ class TransactionDetailDialog extends StatelessWidget {
                         ),
                       ],
                     ),
+
+                    if (notes != null && notes.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'NOTES',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                                color: labelColor,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              notes,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: textColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -471,14 +570,11 @@ class TransactionDetailDialog extends StatelessWidget {
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       ),
-                      onPressed: () {
-                        if (partyMobile.isNotEmpty) {
-                          _shareToWhatsApp(partyMobile, buildShareReceiptText());
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Printing thermal receipt...')),
-                          );
-                        }
+                      onPressed: () async {
+                        await PdfPrintService.print80mmReceipt(
+                          entry: entry,
+                          partyName: partyName,
+                        );
                       },
                       icon: const Icon(LucideIcons.printer, size: 14, color: Colors.white),
                       label: const Text(
@@ -500,9 +596,10 @@ class TransactionDetailDialog extends StatelessWidget {
                         backgroundColor: cardBg,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       ),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Generating Invoice V2 PDF...')),
+                      onPressed: () async {
+                        await PdfPrintService.printInvoiceV2(
+                          entry: entry,
+                          partyName: partyName,
                         );
                       },
                       icon: Icon(LucideIcons.fileText, size: 14, color: textColor),
