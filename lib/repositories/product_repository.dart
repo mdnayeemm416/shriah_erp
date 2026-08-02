@@ -13,7 +13,13 @@ class ProductRepository {
     if (!Hive.isAdapterRegistered(adapter.typeId)) {
       Hive.registerAdapter(adapter);
     }
-    await Hive.openBox<ProductModel>(_boxName);
+    try {
+      await Hive.openBox<ProductModel>(_boxName);
+    } catch (e) {
+      debugPrint('Failed to open Hive box $_boxName ($e). Clearing disk cache and reopening...');
+      await Hive.deleteBoxFromDisk(_boxName);
+      await Hive.openBox<ProductModel>(_boxName);
+    }
   }
 
   Future<List<ProductModel>> getProducts() async {

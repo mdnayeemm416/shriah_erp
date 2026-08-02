@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">ShRiAh ERP</string>
-    <string name="title_activity_main">ShRiAh ERP</string>
-    <string name="package_name">com.shriahgroup.erp</string>
-    <string name="custom_url_scheme">com.shriahgroup.erp</string>
-</resources>

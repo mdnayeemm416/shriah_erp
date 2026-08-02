@@ -1,1 +1,0 @@
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS category text, ADD COLUMN IF NOT EXISTS subcategory text;

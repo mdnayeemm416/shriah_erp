@@ -1,1 +1,0 @@
-ALTER TABLE public.price_compare_products ADD COLUMN IF NOT EXISTS sale_price NUMERIC;

@@ -1,1 +1,0 @@
-ALTER TABLE public.shop_entries ADD COLUMN IF NOT EXISTS due_receivable numeric NOT NULL DEFAULT 0;

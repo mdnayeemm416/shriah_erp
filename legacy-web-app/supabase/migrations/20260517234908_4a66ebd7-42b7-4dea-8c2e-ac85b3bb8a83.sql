@@ -1,1 +1,0 @@
-ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS opening_bank_balance numeric NOT NULL DEFAULT 0;
