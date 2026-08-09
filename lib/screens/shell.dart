@@ -34,7 +34,7 @@ class AppShell extends StatefulWidget {
 }
 
 class AppShellState extends State<AppShell> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 0; // Default: Sales Management Admin
   bool _sidebarCollapsed = false;
 
   void setSelectedIndex(int index) {
@@ -63,7 +63,18 @@ class AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _loadSidebarState();
+    // Set default page based on user role after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authState = context.read<AuthCubit>().state;
+      if (authState is AuthAuthenticated) {
+        final role = authState.user.role ?? '';
+        if (role == 'sales') {
+          setState(() => _selectedIndex = 11); // SalesManagementScreen
+        }
+      }
+    });
   }
+
 
   Future<void> _loadSidebarState() async {
     try {
@@ -91,9 +102,13 @@ class AppShellState extends State<AppShell> {
     final authState = context.watch<AuthCubit>().state;
 
     String fullName = 'User';
+    String userRole = '';
     if (authState is AuthAuthenticated) {
       fullName = authState.user.fullName ?? 'User';
+      userRole = authState.user.role ?? '';
     }
+
+    final isSalesRole = userRole == 'sales';
 
     return BlocListener<AuthCubit, AuthState>(
       listener: (context, state) {
@@ -112,113 +127,120 @@ class AppShellState extends State<AppShell> {
         builder: (context, constraints) {
           final isLarge = constraints.maxWidth >= 800;
 
-        return Scaffold(
-          drawer: isLarge ? null : _buildMobileDrawer(context, isDark, fullName),
-          appBar: isLarge
-              ? null
-              : AppBar(
-                  title: const Text('ShRiAh ERP', style: TextStyle(fontWeight: FontWeight.bold)),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(LucideIcons.bell),
-                      onPressed: () {},
-                    ),
-                    IconButton(
-                      icon: const Icon(LucideIcons.settings),
-                      onPressed: () {
-                        setState(() => _selectedIndex = 10); // Settings index
-                      },
-                    ),
-                  ],
-                ),
-          body: isLarge
-              ? Row(
-                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                  children: [
-                    // Desktop Sidebar
-                    _buildDesktopSidebar(context, isDark, isRtl, fullName),
-                    const VerticalDivider(width: 1),
-                    // Main Screen Area
-                    Expanded(
-                      child: ClipRect(
-                        child: Scaffold(
-                          backgroundColor: Colors.transparent,
-                          appBar: AppBar(
-                            elevation: 0,
+          return Scaffold(
+            // Sales role: drawer with ONLY Sales Management + Logout
+            drawer: isLarge
+                ? null
+                : isSalesRole
+                    ? _buildSalesDrawer(context, isDark, fullName)
+                    : _buildMobileDrawer(context, isDark, fullName, userRole),
+            appBar: isLarge
+                ? null
+                : AppBar(
+                    title: const Text('ShRiAh ERP', style: TextStyle(fontWeight: FontWeight.bold)),
+                    actions: isSalesRole
+                        ? [] // No extra actions for sales role
+                        : [
+                            IconButton(
+                              icon: const Icon(LucideIcons.bell),
+                              onPressed: () {},
+                            ),
+                            IconButton(
+                              icon: const Icon(LucideIcons.settings),
+                              onPressed: () {
+                                setState(() => _selectedIndex = 10);
+                              },
+                            ),
+                          ],
+                  ),
+            body: isLarge
+                ? Row(
+                    textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                    children: [
+                      _buildDesktopSidebar(context, isDark, isRtl, fullName, userRole),
+                      const VerticalDivider(width: 1),
+                      Expanded(
+                        child: ClipRect(
+                          child: Scaffold(
                             backgroundColor: Colors.transparent,
-                            automaticallyImplyLeading: false,
-                            title: Row(
-                              children: [
+                            appBar: AppBar(
+                              elevation: 0,
+                              backgroundColor: Colors.transparent,
+                              automaticallyImplyLeading: false,
+                              title: Row(
+                                children: [
+                                  IconButton(
+                                    icon: Icon(_sidebarCollapsed
+                                        ? LucideIcons.panelLeftOpen
+                                        : LucideIcons.panelLeftClose),
+                                    onPressed: _toggleSidebar,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Logged in as: $fullName',
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
+                              actions: [
                                 IconButton(
-                                  icon: Icon(_sidebarCollapsed
-                                      ? LucideIcons.panelLeftOpen
-                                      : LucideIcons.panelLeftClose),
-                                  onPressed: _toggleSidebar,
+                                  icon: Icon(
+                                    isDark ? LucideIcons.sun : LucideIcons.moon,
+                                    size: 20,
+                                  ),
+                                  onPressed: () {
+                                    context.read<ThemeCubit>().toggleTheme();
+                                  },
                                 ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'Logged in as: $fullName',
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                                ),
+                                const SizedBox(width: 16),
                               ],
                             ),
-                            actions: [
-                              IconButton(
-                                icon: Icon(
-                                  isDark ? LucideIcons.sun : LucideIcons.moon,
-                                  size: 20,
-                                ),
-                                onPressed: () {
-                                  context.read<ThemeCubit>().toggleTheme();
-                                },
-                              ),
-                              const SizedBox(width: 16),
-                            ],
+                            body: _screens[_selectedIndex],
                           ),
-                          body: _screens[_selectedIndex],
                         ),
                       ),
-                    ),
-                  ],
-                )
-              : _screens[_selectedIndex], // Mobile screen
-          bottomNavigationBar: isLarge
-              ? null
-              : BottomNavigationBar(
-                  type: BottomNavigationBarType.fixed,
-                  currentIndex: _selectedIndex > 3 ? 0 : _selectedIndex,
-                  selectedItemColor: AppColors.primary,
-                  unselectedItemColor: Colors.grey,
-                  onTap: (idx) {
-                    setState(() => _selectedIndex = idx);
-                  },
-                  items: [
-                    BottomNavigationBarItem(
-                      icon: const Icon(LucideIcons.home),
-                      label: context.t('nav.home'),
-                    ),
-                    BottomNavigationBarItem(
-                      icon: const Icon(LucideIcons.store),
-                      label: context.t('nav.shop'),
-                    ),
-                    BottomNavigationBarItem(
-                      icon: const Icon(LucideIcons.globe),
-                      label: context.t('nav.wholesale'),
-                    ),
-                    BottomNavigationBarItem(
-                      icon: const Icon(LucideIcons.fileBarChart),
-                      label: context.t('nav.reports'),
-                    ),
-                  ],
-                ),
-        );
-      },
-    ),
-  );
-}
+                    ],
+                  )
+                : _screens[_selectedIndex],
+            // Sales role: NO bottom navigation bar
+            bottomNavigationBar: isLarge || isSalesRole
+                ? null
+                : BottomNavigationBar(
+                    type: BottomNavigationBarType.fixed,
+                    currentIndex: _selectedIndex > 3 ? 0 : _selectedIndex,
+                    selectedItemColor: AppColors.primary,
+                    unselectedItemColor: Colors.grey,
+                    onTap: (idx) {
+                      setState(() => _selectedIndex = idx);
+                    },
+                    items: [
+                      BottomNavigationBarItem(
+                        icon: const Icon(LucideIcons.home),
+                        label: context.t('nav.home'),
+                      ),
+                      BottomNavigationBarItem(
+                        icon: const Icon(LucideIcons.store),
+                        label: context.t('nav.shop'),
+                      ),
+                      BottomNavigationBarItem(
+                        icon: const Icon(LucideIcons.globe),
+                        label: context.t('nav.wholesale'),
+                      ),
+                      BottomNavigationBarItem(
+                        icon: const Icon(LucideIcons.fileBarChart),
+                        label: context.t('nav.reports'),
+                      ),
+                    ],
+                  ),
+          );
+        },
+      ),
+    );
+  }
 
-  Widget _buildDesktopSidebar(BuildContext context, bool isDark, bool isRtl, String userName) {
+  Widget _buildDesktopSidebar(BuildContext context, bool isDark, bool isRtl, String userName, String userRole) {
     final width = _sidebarCollapsed ? 76.0 : 250.0;
+    final isAdmin = userRole == 'admin';
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -279,8 +301,8 @@ class AppShellState extends State<AppShell> {
                 _buildSidebarItem(7, LucideIcons.calendarCheck, 'Daily Closing'),
                 _buildSidebarItem(8, LucideIcons.barChart, 'Profit Summary'),
                 _buildSidebarItem(9, LucideIcons.users, context.t('nav.employees')),
-                _buildSidebarItem(11, LucideIcons.userCheck, 'Sales Management'),
-                _buildSidebarItem(12, LucideIcons.shieldAlert, 'Sales Management Admin'),
+                // Sales Management Admin only visible to admin role
+                if (isAdmin) _buildSidebarItem(12, LucideIcons.shieldAlert, 'Sales Management Admin'),
                 _buildSidebarItem(10, LucideIcons.settings, context.t('nav.settings')),
               ],
             ),
@@ -374,7 +396,154 @@ class AppShellState extends State<AppShell> {
     );
   }
 
-  Widget _buildMobileDrawer(BuildContext context, bool isDark, String userName) {
+  /// Restricted drawer for sales role — ONLY shows Sales Management + Logout
+  Widget _buildSalesDrawer(BuildContext context, bool isDark, String userName) {
+    return Drawer(
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
+      ),
+      backgroundColor: isDark ? AppColors.bgDark : AppColors.bgLight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Gradient Account Header
+          Container(
+            padding: const EdgeInsets.only(top: 60, bottom: 24, left: 24, right: 24),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.primary, AppColors.primaryGlow],
+              ),
+              borderRadius: const BorderRadius.only(topRight: Radius.circular(32)),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withAlpha(60),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: CircleAvatar(
+                    radius: 28,
+                    backgroundColor: AppColors.primary.withAlpha(40),
+                    child: const Icon(LucideIcons.user, color: AppColors.primary, size: 28),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        userName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(50),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.circle, color: Colors.greenAccent, size: 8),
+                            SizedBox(width: 4),
+                            Text(
+                              'Sales Session',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Only one nav item: Sales Management
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  child: Text(
+                    'MY WORKSPACE',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1),
+                  ),
+                ),
+                _buildDrawerItem(11, LucideIcons.userCheck, 'Sales Management', isDark),
+              ],
+            ),
+          ),
+
+          // Footer: Logout only
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () {
+                Navigator.pop(context);
+                context.read<AuthCubit>().logout();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.red.withAlpha(18),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.red.withAlpha(40)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(LucideIcons.logOut, color: Colors.redAccent, size: 20),
+                    SizedBox(width: 16),
+                    Text(
+                      'Logout',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileDrawer(BuildContext context, bool isDark, String userName, String userRole) {
+    final isAdmin = userRole == 'admin';
     return Drawer(
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
@@ -498,8 +667,8 @@ class AppShellState extends State<AppShell> {
                 _buildDrawerItem(7, LucideIcons.calendarCheck, 'Daily Closing', isDark),
                 _buildDrawerItem(8, LucideIcons.barChart, 'Profit Summary', isDark),
                 _buildDrawerItem(9, LucideIcons.users, context.t('nav.employees'), isDark),
-                _buildDrawerItem(11, LucideIcons.userCheck, 'Sales Management', isDark),
-                _buildDrawerItem(12, LucideIcons.shieldAlert, 'Sales Management Admin', isDark),
+                // Sales Management Admin only visible to admin role
+                if (isAdmin) _buildDrawerItem(12, LucideIcons.shieldAlert, 'Sales Management Admin', isDark),
                 _buildDrawerItem(10, LucideIcons.settings, context.t('nav.settings'), isDark),
               ],
             ),

@@ -61,6 +61,11 @@ String resolveImageUrl(String path) {
     return trimmed;
   }
 
+  if (trimmed.startsWith('/uploads') || trimmed.startsWith('uploads')) {
+    final cleanPath = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+    return 'https://api.shriah.com$cleanPath';
+  }
+
   final base = ApiClient.baseUrl;
   return trimmed.startsWith('/') ? '$base$trimmed' : '$base/$trimmed';
 }

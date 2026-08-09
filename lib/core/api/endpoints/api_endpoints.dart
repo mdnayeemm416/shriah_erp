@@ -51,6 +51,14 @@ class ApiEndpoints {
   static const String wholesaleReceivablesBreakdown = '/wholesale/receivables/breakdown';
   static const String wholesaleImportCsv = '/wholesale/import-csv';
 
+  // --- Sales Visits Management ---
+  static const String wholesaleSalesVisits = '/sales/visits';
+  static const String wholesaleSalesVisitsSummary = '/sales/visits/summary';
+  static const String wholesaleSalesVisitsSalesmenBreakdown = '/sales/salesmen-breakdown';
+  static const String wholesaleSalesmen = '/sales/salesmen';
+  static String wholesaleSalesVisitById(String id) => '/sales/visits/$id';
+  static const String salesCustomers = '/sales/customers';
+
   // --- Wholesale Price Benchmark ---
   static const String wholesalePriceCompares = '/wholesale/price-compares';
 

@@ -22,6 +22,9 @@ class UserModel extends HiveObject {
   @HiveField(5)
   final String? landingPage;
 
+  @HiveField(8)
+  final String? role;
+
   @HiveField(6)
   final bool isDisabled;
 
@@ -35,6 +38,7 @@ class UserModel extends HiveObject {
     this.mobile,
     this.username,
     this.landingPage,
+    this.role,
     this.isDisabled = false,
     required this.createdAt,
   });
@@ -43,13 +47,15 @@ class UserModel extends HiveObject {
     return UserModel(
       id: json['id'] as String,
       email: json['email'] as String?,
-      fullName: json['full_name'] as String?,
+      // Support both camelCase (API response) and snake_case (Hive cache)
+      fullName: (json['fullName'] ?? json['full_name']) as String?,
       mobile: json['mobile'] as String?,
       username: json['username'] as String?,
-      landingPage: json['landing_page'] as String?,
-      isDisabled: json['is_disabled'] as bool? ?? false,
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'] as String) 
+      landingPage: (json['landingPage'] ?? json['landing_page']) as String?,
+      role: json['role'] as String?,
+      isDisabled: (json['isDisabled'] ?? json['is_disabled']) as bool? ?? false,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
     );
   }
@@ -58,11 +64,12 @@ class UserModel extends HiveObject {
     return {
       'id': id,
       'email': email,
-      'full_name': fullName,
+      'fullName': fullName,
       'mobile': mobile,
       'username': username,
-      'landing_page': landingPage,
-      'is_disabled': isDisabled,
+      'landingPage': landingPage,
+      'role': role,
+      'isDisabled': isDisabled,
       'created_at': createdAt.toIso8601String(),
     };
   }

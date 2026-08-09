@@ -30,6 +30,7 @@ import 'repositories/employee_expense_repository.dart';
 import 'repositories/price_compare_repository.dart';
 import 'repositories/wholesale_repository.dart';
 import 'repositories/opening_balance_repository.dart';
+import 'repositories/sales_visit_repository.dart';
 import 'repositories/wholesale/wholesale_customer_repository.dart';
 import 'repositories/wholesale/wholesale_category_repository.dart';
 import 'repositories/wholesale/wholesale_sale_repository.dart';
@@ -71,6 +72,7 @@ void main() async {
     final priceCompareRepo = PriceCompareRepository();
     final wholesaleRepo = WholesaleRepository();
     final openingBalanceRepo = OpeningBalanceRepository();
+    final salesVisitRepo = SalesVisitRepository();
 
     // 2. Initialize Hive schemas & API sync repositories
     await shopRepo.initialize();
@@ -116,6 +118,7 @@ void main() async {
           RepositoryProvider<WholesalePaymentRepository>.value(value: wholesaleRepo.paymentRepo),
           RepositoryProvider<WholesaleSalesReturnRepository>.value(value: wholesaleRepo.salesReturnRepo),
           RepositoryProvider<WholesaleDashboardRepository>.value(value: wholesaleRepo.dashboardRepo),
+          RepositoryProvider<SalesVisitRepository>.value(value: salesVisitRepo),
         ],
         child: MultiBlocProvider(
           providers: [
@@ -156,10 +159,14 @@ void main() async {
               )..loadAllData(),
             ),
             BlocProvider<SalesManagementCubit>(
-              create: (context) => SalesManagementCubit(),
+              create: (context) => SalesManagementCubit(
+                salesVisitRepository: context.read<SalesVisitRepository>(),
+              ),
             ),
             BlocProvider<SalesManagementAdminCubit>(
-              create: (context) => SalesManagementAdminCubit(),
+              create: (context) => SalesManagementAdminCubit(
+                salesVisitRepository: context.read<SalesVisitRepository>(),
+              ),
             ),
           ],
           child: const MyApp(),

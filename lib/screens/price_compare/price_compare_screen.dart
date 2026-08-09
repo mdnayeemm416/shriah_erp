@@ -78,12 +78,12 @@ class _PriceCompareScreenState extends State<PriceCompareScreen> {
                   controller: _salePriceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
-                    labelText: 'Selling Price',
+                    labelText: 'Selling Price *',
                     prefixText: 'SAR ',
                   ),
                   validator: (val) {
-                    if (val == null || val.isEmpty) return null;
-                    if (double.tryParse(val) == null) return 'Enter a valid number';
+                    if (val == null || val.trim().isEmpty) return 'Enter selling price';
+                    if (double.tryParse(val.trim()) == null) return 'Enter a valid number';
                     return null;
                   },
                 ),

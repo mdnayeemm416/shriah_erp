@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -6,8 +5,12 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../common_widgets/empty_error_state_widgets.dart';
+import '../../common_widgets/smart_image_widget.dart';
 import '../../../../blocs/sales_management/sales_management_cubit.dart';
 import '../../../../blocs/sales_management/sales_management_state.dart';
+import '../../../../models/sales_visit_model.dart';
+import 'package:toastification/toastification.dart';
 
 class VisitHistoryDashboard extends StatefulWidget {
   final Color cardBg;
@@ -36,53 +39,51 @@ class _VisitHistoryDashboardState extends State<VisitHistoryDashboard> {
       builder: (context, state) {
         final selectedDate = state.selectedDate;
 
-        // 1. Filter records by selected date
-        final dateRecords = state.visitRecords.where((record) {
-          return record.dateTime.year == selectedDate.year &&
-              record.dateTime.month == selectedDate.month &&
-              record.dateTime.day == selectedDate.day;
-        }).toList();
+        // The list is already filtered by date from the API, so we show all returned records
+        final dateRecords = List<VisitRecord>.from(state.visitRecords);
 
         // Sort by time ascending for gap calculations
         dateRecords.sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
         final filteredRecords = dateRecords;
 
-        // 2. Compute Statistics on filtered records
-        final totalVisits = filteredRecords.length;
-        final uniqueShops = filteredRecords.map((r) => r.shopName).toSet().length;
-        final totalSale = filteredRecords.fold<double>(0.0, (sum, r) => sum + r.amount);
+        // 2. Compute Statistics (use API summaryMetrics if available, fallback to client calculations)
+        final summary = state.summaryMetrics;
+        
+        final totalVisits = summary?.totalVisits ?? filteredRecords.length;
+        final uniqueShops = summary?.uniqueShops ?? filteredRecords.map((r) => r.shopName).toSet().length;
+        final totalSale = summary?.totalReportedSale ?? filteredRecords.fold<double>(0.0, (sum, r) => sum + r.amount);
 
-        // Subtotals & counts
-        double cashTotal = 0.0;
-        double bankTotal = 0.0;
-        double creditTotal = 0.0;
-        int zeroSaleCount = 0;
+        double cashTotal = summary?.cashTotal ?? 0.0;
+        double bankTotal = summary?.bankTotal ?? 0.0;
+        double creditTotal = summary?.creditTotal ?? 0.0;
+        int zeroSaleCount = summary?.zeroSaleCount ?? 0;
 
-        for (final r in filteredRecords) {
-          if (r.amount == 0) {
-            zeroSaleCount++;
-          }
-          if (r.paymentType == 'Cash') {
-            cashTotal += r.amount;
-          } else if (r.paymentType == 'Bank') {
-            bankTotal += r.amount;
-          } else if (r.paymentType == 'Credit') {
-            creditTotal += r.amount;
-          } else if (r.paymentType == 'Partial') {
-            // Sum portions
-            cashTotal += r.cashAmount;
-            bankTotal += r.bankAmount;
-            creditTotal += r.creditAmount;
+        if (summary == null) {
+          for (final r in filteredRecords) {
+            if (r.amount == 0) {
+              zeroSaleCount++;
+            }
+            if (r.paymentType == 'Cash') {
+              cashTotal += r.amount;
+            } else if (r.paymentType == 'Bank') {
+              bankTotal += r.amount;
+            } else if (r.paymentType == 'Credit') {
+              creditTotal += r.amount;
+            } else if (r.paymentType == 'Partial') {
+              cashTotal += r.cashAmount;
+              bankTotal += r.bankAmount;
+              creditTotal += r.creditAmount;
+            }
           }
         }
 
         // Time stats
-        String firstVisitTime = '--:--';
-        String lastVisitTime = '--:--';
-        String avgGapText = 'N/A';
+        String firstVisitTime = summary?.firstVisitTime ?? '--:--';
+        String lastVisitTime = summary?.lastVisitTime ?? '--:--';
+        String avgGapText = summary?.avgTimeBetweenShops ?? 'N/A';
 
-        if (dateRecords.isNotEmpty) {
+        if (summary == null && dateRecords.isNotEmpty) {
           firstVisitTime = DateFormat('HH:mm').format(dateRecords.first.dateTime);
           lastVisitTime = DateFormat('HH:mm').format(dateRecords.last.dateTime);
 
@@ -211,21 +212,25 @@ class _VisitHistoryDashboardState extends State<VisitHistoryDashboard> {
             const SizedBox(height: 24),
 
             // C. RECORDS LIST
-            if (filteredRecords.isEmpty)
-              Center(
+            if (state.loading)
+              const Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(32.0),
-                  child: Column(
-                    children: [
-                      Icon(LucideIcons.folderOpen, size: 48, color: widget.subtextColor),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No visit records found for this date.',
-                        style: TextStyle(color: widget.subtextColor, fontSize: 13),
-                      ),
-                    ],
-                  ),
+                  padding: EdgeInsets.all(32.0),
+                  child: CircularProgressIndicator(color: AppColors.primary),
                 ),
+              )
+            else if (state.error.isNotEmpty)
+              BeautifulErrorStateWidget(
+                message: state.error,
+                onRetry: () {
+                  context.read<SalesManagementCubit>().loadSalesVisits();
+                },
+              )
+            else if (filteredRecords.isEmpty)
+              const BeautifulEmptyStateWidget(
+                icon: LucideIcons.folderOpen,
+                title: 'No Visit Records',
+                description: 'No field visit logs have been captured for this date.',
               )
             else
               ListView.separated(
@@ -357,7 +362,6 @@ class _VisitHistoryDashboardState extends State<VisitHistoryDashboard> {
 
   Widget _buildRecordCard(int index, VisitRecord record, List<VisitRecord> dateRecords) {
     final timeStr = DateFormat('HH:mm').format(record.dateTime);
-    final hasImage = record.photoPath.isNotEmpty && File(record.photoPath).existsSync();
 
     // Calculate time from previous shop
     String timeGapStr = 'First Visit of Day';
@@ -488,24 +492,35 @@ class _VisitHistoryDashboardState extends State<VisitHistoryDashboard> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Open in Google Maps Link button
-                  InkWell(
-                    onTap: () => _launchMapsUrl(record.shopLocation),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(LucideIcons.externalLink, size: 14, color: AppColors.primary),
-                        SizedBox(width: 4),
-                        Text(
-                          'Open in Google Maps',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
+                  // Actions: Open in Google Maps & Delete Visit Log
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      InkWell(
+                        onTap: () => _launchMapsUrl(record.shopLocation),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(LucideIcons.externalLink, size: 14, color: AppColors.primary),
+                            SizedBox(width: 4),
+                            Text(
+                              'Open in Google Maps',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(LucideIcons.trash2, size: 16, color: Colors.redAccent),
+                        onPressed: () => _showDeleteConfirmDialog(context, record),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -513,29 +528,69 @@ class _VisitHistoryDashboardState extends State<VisitHistoryDashboard> {
             const SizedBox(width: 12),
 
             // Right Column: Shop Photo Preview
-            Container(
+            SmartImageWidget(
+              imageUrl: record.photoPath,
               width: 80,
               height: 80,
-              decoration: BoxDecoration(
-                color: widget.isDark ? Colors.white10 : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: widget.borderColor),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: hasImage
-                    ? Image.file(
-                        File(record.photoPath),
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        color: Colors.black, // Display black box just like Card 3 in screenshot
-                        child: const Icon(LucideIcons.image, size: 24, color: Colors.white24),
-                      ),
+              fit: BoxFit.cover,
+              borderRadius: BorderRadius.circular(16),
+              fallbackWidget: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: widget.isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: widget.borderColor),
+                ),
+                child: const Icon(LucideIcons.image, size: 24, color: Colors.white24),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmDialog(BuildContext context, VisitRecord record) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Visit Log', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text('Are you sure you want to delete the field visit log for "${record.shopName}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<SalesManagementCubit>().deleteVisitRecord(record.id).then((_) {
+                toastification.show(
+                  context: context,
+                  type: ToastificationType.success,
+                  style: ToastificationStyle.flatColored,
+                  title: const Text('Success'),
+                  description: const Text('Field visit record deleted successfully.'),
+                  autoCloseDuration: const Duration(seconds: 4),
+                  showProgressBar: true,
+                );
+              }).catchError((e) {
+                toastification.show(
+                  context: context,
+                  type: ToastificationType.error,
+                  style: ToastificationStyle.flatColored,
+                  title: const Text('Delete Failed'),
+                  description: Text(e.toString().replaceFirst('Exception: ', '')),
+                  autoCloseDuration: const Duration(seconds: 4),
+                  showProgressBar: true,
+                );
+              });
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

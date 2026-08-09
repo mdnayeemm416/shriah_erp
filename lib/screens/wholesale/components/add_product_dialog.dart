@@ -491,7 +491,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildSectionLabel('Sale price (SAR, VAT incl.)', labelColor),
+                                _buildSectionLabel('Sale price (SAR, VAT incl.) *', labelColor),
                                 const SizedBox(height: 6),
                                 _buildTextField(
                                   controller: priceController,
@@ -502,7 +502,15 @@ class _AddProductDialogState extends State<AddProductDialog> {
                                   textColor: textColor,
                                   hintColor: hintColor,
                                   primaryColor: primaryColor,
-                                  validator: (val) => (val == null || double.tryParse(val) == null) ? 'Required' : null,
+                                  validator: (val) {
+                                    if (val == null || val.trim().isEmpty) {
+                                      return 'Required';
+                                    }
+                                    if (double.tryParse(val.trim()) == null) {
+                                      return 'Enter valid price';
+                                    }
+                                    return null;
+                                  },
                                 ),
                               ],
                             ),
@@ -512,7 +520,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildSectionLabel('Purchase price (SAR)', labelColor),
+                                _buildSectionLabel('Purchase price (SAR) *', labelColor),
                                 const SizedBox(height: 6),
                                 _buildTextField(
                                   controller: costController,
@@ -523,7 +531,15 @@ class _AddProductDialogState extends State<AddProductDialog> {
                                   textColor: textColor,
                                   hintColor: hintColor,
                                   primaryColor: primaryColor,
-                                  validator: (val) => (val == null || double.tryParse(val) == null) ? 'Required' : null,
+                                  validator: (val) {
+                                    if (val == null || val.trim().isEmpty) {
+                                      return 'Required';
+                                    }
+                                    if (double.tryParse(val.trim()) == null) {
+                                      return 'Enter valid cost';
+                                    }
+                                    return null;
+                                  },
                                 ),
                               ],
                             ),

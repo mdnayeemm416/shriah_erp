@@ -601,45 +601,94 @@ class _InventoryTabState extends State<InventoryTab> {
                                               fallbackWidget: fallbackIcon,
                                             ),
                                            const SizedBox(width: 12),
-                                           Expanded(
-                                             child: Column(
-                                               crossAxisAlignment:
-                                                   CrossAxisAlignment.start,
-                                               children: [
-                                                 Text(
-                                                   product.name,
-                                                   style: const TextStyle(
-                                                     fontWeight:
-                                                         FontWeight.bold,
-                                                     fontSize: 14,
-                                                   ),
-                                                   maxLines: 2,
-                                                   overflow:
-                                                       TextOverflow.ellipsis,
-                                                 ),
-                                                 const SizedBox(height: 4),
-                                                 Text(
-                                                   'SKU: ${product.itemCode ?? 'N/A'}  •  Barcode: ${product.barcode ?? 'N/A'}',
-                                                   style: const TextStyle(
-                                                     fontSize: 10,
-                                                     color: Colors.grey,
-                                                   ),
-                                                 ),
-                                                 const SizedBox(height: 2),
-                                                 Text(
-                                                   'Price: ${product.price.toStringAsFixed(2)} SAR  •  Cost: ${product.purchasePrice.toStringAsFixed(2)} SAR',
-                                                   style: TextStyle(
-                                                     fontSize: 11,
-                                                     fontWeight: FontWeight.w500,
-                                                     color: isDark
-                                                         ? Colors.grey[300]
-                                                         : const Color(
-                                                             0xFF475569),
-                                                   ),
-                                                 ),
-                                               ],
-                                             ),
-                                           ),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          product.name,
+                                                          style: const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 14,
+                                                          ),
+                                                          maxLines: 2,
+                                                          overflow:
+                                                              TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                      if (product.purchasePrice <= 0.0) ...[
+                                                        const SizedBox(width: 6),
+                                                        const Tooltip(
+                                                          message: 'Missing purchase price',
+                                                          child: Icon(
+                                                            LucideIcons.alertTriangle,
+                                                            color: Colors.redAccent,
+                                                            size: 16,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    'SKU: ${product.itemCode ?? 'N/A'}  •  Barcode: ${product.barcode ?? 'N/A'}',
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors.grey,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text.rich(
+                                                    TextSpan(
+                                                      children: [
+                                                        TextSpan(
+                                                          text: 'Price: ${product.price.toStringAsFixed(2)} SAR  •  ',
+                                                        ),
+                                                        TextSpan(
+                                                          text: 'Cost: ${product.purchasePrice.toStringAsFixed(2)} SAR',
+                                                          style: TextStyle(
+                                                            color: product.purchasePrice <= 0.0
+                                                                ? Colors.redAccent
+                                                                : (isDark
+                                                                    ? Colors.grey[300]
+                                                                    : const Color(0xFF475569)),
+                                                            fontWeight: product.purchasePrice <= 0.0
+                                                                ? FontWeight.bold
+                                                                : FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                        if (product.purchasePrice <= 0.0) ...[
+                                                          const WidgetSpan(
+                                                            alignment: PlaceholderAlignment.middle,
+                                                            child: Padding(
+                                                              padding: EdgeInsets.only(left: 4.0),
+                                                              child: Icon(
+                                                                LucideIcons.alertCircle,
+                                                                color: Colors.redAccent,
+                                                                size: 12,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ],
+                                                    ),
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: isDark
+                                                          ? Colors.grey[300]
+                                                          : const Color(
+                                                              0xFF475569),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                            const SizedBox(width: 8),
                                            Column(
                                              crossAxisAlignment:

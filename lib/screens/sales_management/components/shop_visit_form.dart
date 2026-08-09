@@ -11,6 +11,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../../blocs/sales_management/sales_management_cubit.dart';
 import '../../../../blocs/sales_management/sales_management_state.dart';
+import '../../../../models/sales_visit_model.dart';
 
 class ShopVisitForm extends StatefulWidget {
   final Color cardBg;
@@ -40,7 +41,7 @@ class ShopVisitForm extends StatefulWidget {
 }
 
 class _ShopVisitFormState extends State<ShopVisitForm> {
-  StaticCustomer? _selectedCustomer;
+  SalesCustomerModel? _selectedCustomer;
   final _amountController = TextEditingController(text: '0');
   final _notesController = TextEditingController();
   final _searchController = TextEditingController();
@@ -66,6 +67,14 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
     if (amount == null || amount < 0) return false;
     if (amount == 0 && _notesController.text.trim().isEmpty) return false;
     if (_selectedImagePath == null) return false;
+    if (_capturedCoordinates == null ||
+        _isCapturingLocation ||
+        _capturedCoordinates!.contains('failed') ||
+        _capturedCoordinates!.contains('denied') ||
+        _capturedCoordinates!.contains('disabled') ||
+        _capturedCoordinates!.contains('Capturing')) {
+      return false;
+    }
     if (_paymentType == 'Partial') {
       final cash = double.tryParse(_cashController.text.trim()) ?? 0.0;
       final bank = double.tryParse(_bankController.text.trim()) ?? 0.0;
@@ -80,6 +89,7 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
   void initState() {
     super.initState();
     _searchFocusNode.addListener(() {
+      setState(() {});
       if (_searchFocusNode.hasFocus) {
         context.read<SalesManagementCubit>().filterCustomers(_searchController.text);
       } else {
@@ -117,12 +127,48 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
   }
 
   Future<void> _takePhoto() async {
-    final picker = ImagePicker();
     try {
+      // Check location services first
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          style: ToastificationStyle.flatColored,
+          title: const Text('Location Services Disabled'),
+          description: const Text('Please enable GPS/location services on your device to proceed.'),
+          autoCloseDuration: const Duration(seconds: 4),
+          showProgressBar: true,
+        );
+        return;
+      }
+
+      // Check location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          style: ToastificationStyle.flatColored,
+          title: const Text('Permission Required'),
+          description: const Text('Location permission required'),
+          autoCloseDuration: const Duration(seconds: 4),
+          showProgressBar: true,
+        );
+        return;
+      }
+
+      // Location permission is granted! Now open camera.
+      final picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.camera,
         imageQuality: 75,
       );
+      
       if (image != null) {
         setState(() {
           _selectedImagePath = image.path;
@@ -131,40 +177,8 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
           _capturedAddress = 'Retrieving readable address...';
         });
 
-        // Automatically capture location coordinates & geocode address!
+        // Get current location position
         try {
-          bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-          if (!serviceEnabled) {
-            setState(() {
-              _isCapturingLocation = false;
-              _capturedCoordinates = 'Location services disabled';
-              _capturedAddress = 'Please enable GPS on your device.';
-            });
-            return;
-          }
-
-          LocationPermission permission = await Geolocator.checkPermission();
-          if (permission == LocationPermission.denied) {
-            permission = await Geolocator.requestPermission();
-            if (permission == LocationPermission.denied) {
-              setState(() {
-                _isCapturingLocation = false;
-                _capturedCoordinates = 'Permission denied';
-                _capturedAddress = 'Location permissions are required.';
-              });
-              return;
-            }
-          }
-
-          if (permission == LocationPermission.deniedForever) {
-            setState(() {
-              _isCapturingLocation = false;
-              _capturedCoordinates = 'Permission permanently denied';
-              _capturedAddress = 'Enable location permissions in settings.';
-            });
-            return;
-          }
-
           Position position = await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.high,
@@ -326,12 +340,12 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
 
       final recordLocation = _capturedCoordinates != null && _capturedAddress != null
           ? '$_capturedCoordinates|$_capturedAddress'
-          : (_selectedCustomer!.shopLocation ?? '24.7136,46.6753|Ash Shamiya Al Jadid, Makkah Al Mukarramah');
+          : (_selectedCustomer!.address ?? '24.7136,46.6753|Ash Shamiya Al Jadid, Makkah Al Mukarramah');
 
       final record = VisitRecord(
         id: 'visit-${DateTime.now().millisecondsSinceEpoch}',
         customerName: _selectedCustomer!.name,
-        shopName: _selectedCustomer!.shopName ?? _selectedCustomer!.name,
+        shopName: _selectedCustomer!.name,
         amount: amount,
         paymentType: _paymentType,
         cashAmount: _paymentType == 'Partial' ? cash : (_paymentType == 'Cash' ? amount : 0.0),
@@ -341,8 +355,9 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
         photoPath: _selectedImagePath!,
         dateTime: DateTime.now(),
         shopLocation: recordLocation,
+        salesmanName: 'Mohammed', // Default salesmanName
       );
-      context.read<SalesManagementCubit>().addVisitRecord(record);
+      await context.read<SalesManagementCubit>().addVisitRecord(record);
 
       widget.onSubmit(
         _selectedCustomer!.name,
@@ -351,6 +366,18 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
         _selectedImagePath!,
       );
       _clearForm();
+    } catch (e) {
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          style: ToastificationStyle.flatColored,
+          title: const Text('Submission Failed'),
+          description: Text(e.toString().replaceFirst('Exception: ', '')),
+          autoCloseDuration: const Duration(seconds: 4),
+          showProgressBar: true,
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -370,6 +397,7 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
     showDialog(
       context: context,
       builder: (ctx) {
+        bool isSaving = false;
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
             Widget buildFieldLabel(String label, {bool isRequired = false}) {
@@ -525,7 +553,7 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
                 setDialogState(() {
                   isCapturing = false;
                   if (readableAddress.isNotEmpty) {
-                    shopLocation = '$coordsStr\n$readableAddress';
+                    shopLocation = readableAddress;
                   } else {
                     shopLocation = coordsStr;
                   }
@@ -645,7 +673,6 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
                         ElevatedButton(
                           onPressed: () {
                             final name = nameCtrl.text.trim();
-                            final shopName = shopNameCtrl.text.trim();
                             final mobile = mobileCtrl.text.trim();
                             final address = addressCtrl.text.trim();
                             final notes = notesCtrl.text.trim();
@@ -674,27 +701,50 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
                               return;
                             }
 
-                            final newCustomer = StaticCustomer(
+                            setDialogState(() {
+                              isSaving = true;
+                            });
+
+                            final shopName = shopNameCtrl.text.trim();
+                            final newCustomer = SalesCustomerModel(
+                              id: '',
                               name: name,
                               shopName: shopName.isEmpty ? null : shopName,
                               mobile: mobile,
                               address: address.isEmpty ? null : address,
                               shopLocation: shopLocation,
                               notes: notes.isEmpty ? null : notes,
+                              createdAt: DateTime.now(),
                             );
-                            context.read<SalesManagementCubit>().addCustomer(newCustomer);
-                            setState(() {
-                              _selectedCustomer = newCustomer;
-                            });
 
-                            Navigator.pop(ctx);
-                            toastification.show(
-                              context: context,
-                              type: ToastificationType.success,
-                              title: const Text('Customer Added'),
-                              description: Text('"$name" added locally to form selection.'),
-                              autoCloseDuration: const Duration(seconds: 3),
-                            );
+                            context.read<SalesManagementCubit>().createCustomer(newCustomer).then((_) {
+                              if (mounted) {
+                                setState(() {
+                                  _searchController.text = name;
+                                });
+                                context.read<SalesManagementCubit>().filterCustomers(name);
+                                _searchFocusNode.requestFocus();
+                                Navigator.pop(ctx);
+                                toastification.show(
+                                  context: context,
+                                  type: ToastificationType.success,
+                                  title: const Text('Customer Added'),
+                                  description: Text('"$name" added successfully. Tap on the suggestion list to select.'),
+                                  autoCloseDuration: const Duration(seconds: 4),
+                                );
+                              }
+                            }).catchError((err) {
+                              setDialogState(() {
+                                isSaving = false;
+                              });
+                              toastification.show(
+                                context: ctx,
+                                type: ToastificationType.error,
+                                title: const Text('Failed to Add Customer'),
+                                description: Text(err.toString().replaceFirst('Exception: ', '')),
+                                autoCloseDuration: const Duration(seconds: 4),
+                              );
+                            });
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryGlow,
@@ -703,14 +753,20 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
                               borderRadius: BorderRadius.circular(24),
                             ),
                           ),
-                          child: const Text(
-                            'Save Customer',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: isSaving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Text(
+                                  'Save Customer',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                       ],
                     ),
@@ -813,9 +869,118 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
             // Filtered List Suggestions
             BlocBuilder<SalesManagementCubit, SalesManagementState>(
               builder: (context, state) {
-                if (state.filteredCustomers.isEmpty) {
+                final showDropdown = _searchFocusNode.hasFocus;
+                if (!showDropdown) {
                   return const SizedBox.shrink();
                 }
+
+                // If loading customers
+                if (state.loadingCustomers) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: widget.isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: widget.borderColor),
+                    ),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                      ),
+                    ),
+                  );
+                }
+
+                // If customers loading failed
+                if (state.customersError.isNotEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: widget.isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: widget.borderColor),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(LucideIcons.alertTriangle, size: 24, color: Colors.redAccent),
+                        const SizedBox(height: 8),
+                        Text(
+                          state.customersError,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () {
+                            context.read<SalesManagementCubit>().loadCustomers();
+                          },
+                          icon: const Icon(LucideIcons.refreshCw, size: 12),
+                          label: const Text('Retry', style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // If customers list is empty
+                if (state.customers.isEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: widget.isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: widget.borderColor),
+                    ),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(LucideIcons.users, size: 32, color: Colors.grey),
+                        SizedBox(height: 8),
+                        Text(
+                          'No customer available',
+                          style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // If search query is not empty but no matching filter results
+                final suggestions = state.filteredCustomers;
+                if (suggestions.isEmpty && _searchController.text.trim().isNotEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: widget.isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: widget.borderColor),
+                    ),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(LucideIcons.search, size: 32, color: Colors.grey),
+                        SizedBox(height: 8),
+                        Text(
+                          'No matching customers found',
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // Otherwise show suggestion list (either filtered suggestions, or all customers if query is empty)
+                final listToShow = _searchController.text.trim().isEmpty ? state.customers : suggestions;
+
                 return Container(
                   constraints: const BoxConstraints(maxHeight: 220),
                   margin: const EdgeInsets.only(bottom: 12),
@@ -827,15 +992,13 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
                   child: ListView.separated(
                     shrinkWrap: true,
                     padding: const EdgeInsets.all(8),
-                    itemCount: state.filteredCustomers.length,
+                    itemCount: listToShow.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
-                      final customer = state.filteredCustomers[index];
+                      final customer = listToShow[index];
                       return ListTile(
                         title: Text(
-                          customer.shopName != null
-                              ? '${customer.name} (${customer.shopName})'
-                              : customer.name,
+                          customer.name,
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         subtitle: Text(
@@ -880,9 +1043,7 @@ class _ShopVisitFormState extends State<ShopVisitForm> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _selectedCustomer!.shopName != null
-                                ? '${_selectedCustomer!.name} (${_selectedCustomer!.shopName})'
-                                : _selectedCustomer!.name,
+                            _selectedCustomer!.name,
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                           const SizedBox(height: 2),

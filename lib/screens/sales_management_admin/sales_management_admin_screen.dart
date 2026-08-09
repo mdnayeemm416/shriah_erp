@@ -6,9 +6,11 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../blocs/sales_management/sales_management_state.dart'; // For VisitRecord
+import '../common_widgets/empty_error_state_widgets.dart';
+import '../../models/sales_visit_model.dart';
 import '../../blocs/sales_management_admin/sales_management_admin_cubit.dart';
 import '../../blocs/sales_management_admin/sales_management_admin_state.dart';
+import 'package:toastification/toastification.dart';
 
 class SalesManagementAdminScreen extends StatefulWidget {
   const SalesManagementAdminScreen({super.key});
@@ -22,6 +24,14 @@ class _SalesManagementAdminScreenState
     extends State<SalesManagementAdminScreen> {
   final _searchTextController = TextEditingController();
   int _innerTab = 0; // 0: Visit Records, 1: Salesman Breakdown, 2: Daily Map
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<SalesManagementAdminCubit>().resetAndLoad();
+    });
+  }
 
   @override
   void dispose() {
@@ -40,19 +50,34 @@ class _SalesManagementAdminScreenState
         ? Colors.white10
         : Colors.black.withValues(alpha: 0.05);
 
-    return BlocBuilder<SalesManagementAdminCubit, SalesManagementAdminState>(
-      builder: (context, state) {
-        final selectedDate = state.selectedDate;
+    return BlocListener<SalesManagementAdminCubit, SalesManagementAdminState>(
+      listenWhen: (previous, current) => current.error.isNotEmpty && previous.error != current.error,
+      listener: (context, state) {
+        if (state.error.isNotEmpty) {
+          toastification.show(
+            context: context,
+            type: ToastificationType.error,
+            style: ToastificationStyle.flatColored,
+            title: const Text('Admin API Error'),
+            description: Text(state.error),
+            autoCloseDuration: const Duration(seconds: 4),
+            showProgressBar: true,
+          );
+        }
+      },
+      child: BlocBuilder<SalesManagementAdminCubit, SalesManagementAdminState>(
+        builder: (context, state) {
 
-        // 1. Filter records by selected date
-        final dateRecords = state.visitRecords.where((record) {
-          return record.dateTime.year == selectedDate.year &&
-              record.dateTime.month == selectedDate.month &&
-              record.dateTime.day == selectedDate.day;
+        // 1. Filter records frontend-side only by customer if filtered
+        final filteredRecords = state.visitRecords.where((r) {
+          final matchesCustomer =
+              state.customerFilter == 'All customers' ||
+              r.customerName == state.customerFilter;
+          return matchesCustomer;
         }).toList();
 
-        // Sort by time ascending for gap calculations
-        dateRecords.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+        // Sort by time ascending for gap calculations and list ordering
+        filteredRecords.sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
         // Get list of unique customers for filter dropdown
         final customersList = ['All customers'];
@@ -63,86 +88,56 @@ class _SalesManagementAdminScreenState
         }
 
         // Get list of unique salesmen for filter
-        final salesmenList = ['All Salesmen'];
-        for (final r in state.visitRecords) {
-          if (!salesmenList.contains(r.salesmanName)) {
-            salesmenList.add(r.salesmanName);
-          }
-        }
+        final salesmenList = state.salesmenDropdown;
 
-        // Apply filters: Payment type, Customer, Salesman
-        final filteredRecords = dateRecords.where((r) {
-          final matchesPayment =
-              state.paymentTypeFilter == 'All payment types' ||
-              r.paymentType.toLowerCase() ==
-                  state.paymentTypeFilter.toLowerCase();
-
-          final matchesCustomer =
-              state.customerFilter == 'All customers' ||
-              r.customerName == state.customerFilter;
-
-          final matchesSalesman =
-              state.salesmanFilter == 'All Salesmen' ||
-              r.salesmanName.toLowerCase() ==
-                  state.salesmanFilter.toLowerCase();
-
-          return matchesPayment && matchesCustomer && matchesSalesman;
-        }).toList();
-
-        // 2. Compute Statistics on filtered records
-        final totalVisits = filteredRecords.length;
-        final uniqueShops = filteredRecords
-            .map((r) => r.shopName)
-            .toSet()
-            .length;
-        final totalSale = filteredRecords.fold<double>(
-          0.0,
-          (sum, r) => sum + r.amount,
-        );
+        // 2. Compute or Read Statistics
+        final metrics = state.summaryMetrics;
+        final totalVisits = metrics?.totalVisits ?? filteredRecords.length;
+        final uniqueShops = metrics?.uniqueShops ?? filteredRecords.map((r) => r.shopName).toSet().length;
+        final totalSale = metrics?.totalReportedSale ?? filteredRecords.fold<double>(0.0, (sum, r) => sum + r.amount);
 
         // Subtotals & counts
-        double cashTotal = 0.0;
-        double bankTotal = 0.0;
-        double creditTotal = 0.0;
-        int zeroSaleCount = 0;
+        double cashTotal = metrics?.cashTotal ?? 0.0;
+        double bankTotal = metrics?.bankTotal ?? 0.0;
+        double creditTotal = metrics?.creditTotal ?? 0.0;
+        int zeroSaleCount = metrics?.zeroSaleCount ?? 0;
 
-        for (final r in filteredRecords) {
-          if (r.amount == 0) {
-            zeroSaleCount++;
-          }
-          if (r.paymentType == 'Cash') {
-            cashTotal += r.amount;
-          } else if (r.paymentType == 'Bank') {
-            bankTotal += r.amount;
-          } else if (r.paymentType == 'Credit') {
-            creditTotal += r.amount;
-          } else if (r.paymentType == 'Partial') {
-            // Sum portions
-            cashTotal += r.cashAmount;
-            bankTotal += r.bankAmount;
-            creditTotal += r.creditAmount;
+        if (metrics == null) {
+          for (final r in filteredRecords) {
+            if (r.amount == 0) {
+              zeroSaleCount++;
+            }
+            if (r.paymentType == 'Cash') {
+              cashTotal += r.amount;
+            } else if (r.paymentType == 'Bank') {
+              bankTotal += r.amount;
+            } else if (r.paymentType == 'Credit') {
+              creditTotal += r.amount;
+            } else if (r.paymentType == 'Partial') {
+              cashTotal += r.cashAmount;
+              bankTotal += r.bankAmount;
+              creditTotal += r.creditAmount;
+            }
           }
         }
 
-        // Time stats (on dateRecords for consistency with day timeline)
-        String firstVisitTime = '--:--';
-        String lastVisitTime = '--:--';
-        String avgGapText = 'N/A';
+        // Time stats
+        String firstVisitTime = metrics?.firstVisitTime ?? '--:--';
+        String lastVisitTime = metrics?.lastVisitTime ?? '--:--';
+        String avgGapText = metrics?.avgTimeBetweenShops ?? 'N/A';
 
-        if (dateRecords.isNotEmpty) {
-          firstVisitTime = DateFormat(
-            'HH:mm',
-          ).format(dateRecords.first.dateTime);
-          lastVisitTime = DateFormat('HH:mm').format(dateRecords.last.dateTime);
+        if (metrics == null && filteredRecords.isNotEmpty) {
+          firstVisitTime = DateFormat('HH:mm').format(filteredRecords.first.dateTime);
+          lastVisitTime = DateFormat('HH:mm').format(filteredRecords.last.dateTime);
 
-          if (dateRecords.length > 1) {
+          if (filteredRecords.length > 1) {
             int totalDiffMinutes = 0;
-            for (int i = 0; i < dateRecords.length - 1; i++) {
-              totalDiffMinutes += dateRecords[i + 1].dateTime
-                  .difference(dateRecords[i].dateTime)
+            for (int i = 0; i < filteredRecords.length - 1; i++) {
+              totalDiffMinutes += filteredRecords[i + 1].dateTime
+                  .difference(filteredRecords[i].dateTime)
                   .inMinutes;
             }
-            final avgMinutes = totalDiffMinutes ~/ (dateRecords.length - 1);
+            final avgMinutes = totalDiffMinutes ~/ (filteredRecords.length - 1);
             final hours = avgMinutes ~/ 60;
             final mins = avgMinutes % 60;
             avgGapText = hours > 0 ? '${hours}h ${mins}m' : '${mins}m';
@@ -164,25 +159,59 @@ class _SalesManagementAdminScreenState
                         horizontal: 16.0,
                         vertical: 12.0,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'ADMIN PANEL',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                              color: subtextColor,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'ADMIN PANEL',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2,
+                                  color: subtextColor,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Sales Management',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Sales Management',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
+                          Container(
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                              ),
+                            ),
+                            child: IconButton(
+                              onPressed: () {
+                                context.read<SalesManagementAdminCubit>().loadAdminDashboard();
+                                toastification.show(
+                                  context: context,
+                                  type: ToastificationType.success,
+                                  style: ToastificationStyle.flatColored,
+                                  title: const Text('Refreshing Data'),
+                                  description: const Text('Admin sales dashboard updated.'),
+                                  autoCloseDuration: const Duration(seconds: 2),
+                                  showProgressBar: true,
+                                );
+                              },
+                              icon: Icon(
+                                LucideIcons.refreshCw,
+                                size: 18,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                              tooltip: 'Refresh Page',
                             ),
                           ),
                         ],
@@ -414,278 +443,324 @@ class _SalesManagementAdminScreenState
                         ),
                         const SizedBox(height: 20),
 
-                        // 3-Column Statistics capsules (Matching screenshot)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'SHOPS VISITED',
-                                    totalVisits.toString(),
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'UNIQUE SHOPS',
-                                    uniqueShops.toString(),
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'REPORTED SALE',
-                                    totalSale.toStringAsFixed(2),
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
-                                  ),
-                                ),
-                              ],
+                        // Content body
+                        if (state.loading)
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(32.0),
+                              child: CircularProgressIndicator(color: AppColors.primary),
                             ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'TOTAL CASH',
-                                    cashTotal.toStringAsFixed(2),
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
+                          )
+                        else if (state.error.isNotEmpty)
+                          BeautifulErrorStateWidget(
+                            message: state.error,
+                            onRetry: () {
+                              context.read<SalesManagementAdminCubit>().loadAdminDashboard();
+                            },
+                          )
+                        else ...[
+                          // 3-Column Statistics capsules (Matching screenshot)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'SHOPS VISITED',
+                                      totalVisits.toString(),
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'TOTAL BANK',
-                                    bankTotal.toStringAsFixed(2),
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'UNIQUE SHOPS',
+                                      uniqueShops.toString(),
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'TOTAL CREDIT',
-                                    creditTotal.toStringAsFixed(2),
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'REPORTED SALE',
+                                      totalSale.toStringAsFixed(2),
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'ZERO-SALE VISITS',
-                                    zeroSaleCount.toString(),
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'TOTAL CASH',
+                                      cashTotal.toStringAsFixed(2),
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'FIRST VISIT',
-                                    firstVisitTime,
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'TOTAL BANK',
+                                      bankTotal.toStringAsFixed(2),
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'LAST VISIT',
-                                    lastVisitTime,
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'TOTAL CREDIT',
+                                      creditTotal.toStringAsFixed(2),
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'AVG. TIME\nBETWEEN SHOPS',
-                                    avgGapText,
-                                    subtextColor,
-                                    textColor,
-                                    borderColor,
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'ZERO-SALE VISITS',
+                                      zeroSaleCount.toString(),
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
                                   ),
-                                ),
-                                const Expanded(child: SizedBox()),
-                                const SizedBox(width: 8),
-                                const Expanded(child: SizedBox()),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'FIRST VISIT',
+                                      firstVisitTime,
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'LAST VISIT',
+                                      lastVisitTime,
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'AVG. TIME\nBETWEEN SHOPS',
+                                      avgGapText,
+                                      subtextColor,
+                                      textColor,
+                                      borderColor,
+                                    ),
+                                  ),
+                                  const Expanded(child: SizedBox()),
+                                  const SizedBox(width: 8),
+                                  const Expanded(child: SizedBox()),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
 
-                        // Inner tabs selection
-                        Row(
-                          children: [
-                            _buildInnerTabButton(
-                              'Visit Records',
-                              0,
-                              subtextColor,
-                            ),
-                            _buildInnerTabButton(
-                              'Salesman Breakdown',
-                              1,
-                              subtextColor,
-                            ),
-                            _buildInnerTabButton('Daily Map', 2, subtextColor),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
+                          // Inner tabs selection
+                          Row(
+                            children: [
+                              _buildInnerTabButton(
+                                'Visit Records',
+                                0,
+                                subtextColor,
+                              ),
+                              _buildInnerTabButton(
+                                'Salesman Breakdown',
+                                1,
+                                subtextColor,
+                              ),
+                              _buildInnerTabButton('Daily Map', 2, subtextColor),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
 
-                        // List views
-                        if (_innerTab == 0) ...[
-                          if (filteredRecords.isEmpty)
-                            Center(
+                          // Tab contents
+                          if (_innerTab == 0) ...[
+                            if (filteredRecords.isEmpty)
+                              const BeautifulEmptyStateWidget(
+                                icon: LucideIcons.folderOpen,
+                                title: 'No Visit Records',
+                                description: 'No field visit logs have been captured for this date.',
+                              )
+                            else
+                              ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: filteredRecords.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 12),
+                                itemBuilder: (context, index) {
+                                  final record = filteredRecords[index];
+                                  return _buildRecordCard(
+                                    index + 1,
+                                    record,
+                                    cardBg,
+                                    borderColor,
+                                    subtextColor,
+                                    filteredRecords,
+                                  );
+                                },
+                              ),
+                          ] else if (_innerTab == 1) ...[
+                            if (state.salesmenBreakdown.isEmpty)
+                              const BeautifulEmptyStateWidget(
+                                icon: LucideIcons.barChart2,
+                                title: 'No Performance Data',
+                                description: 'No salesman performance breakdown data found.',
+                              )
+                            else
+                              ...state.salesmenBreakdown.map((b) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12.0),
+                                  child: Card(
+                                    color: cardBg,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      side: BorderSide(color: borderColor),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                b.salesmanName.toUpperCase(),
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 14,
+                                                  color: AppColors.primaryGlow,
+                                                  letterSpacing: 0.8,
+                                                ),
+                                              ),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Text(
+                                                  'Productivity: ${b.productivityRate.toStringAsFixed(1)}%',
+                                                  style: const TextStyle(
+                                                    color: AppColors.primary,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 14),
+                                          _buildBreakdownRow(
+                                            'Total Visits / Closed',
+                                            '${b.totalVisits} visits / ${b.totalClosedShops} closed',
+                                            Colors.green,
+                                            subtextColor,
+                                          ),
+                                          _buildBreakdownRow(
+                                            'Total Reported Sale',
+                                            '${b.totalReportedSale.toStringAsFixed(2)} SAR',
+                                            AppColors.primary,
+                                            subtextColor,
+                                          ),
+                                          _buildBreakdownRow(
+                                            'Average Sale Value',
+                                            '${b.averageSaleValue.toStringAsFixed(2)} SAR',
+                                            Colors.orange,
+                                            subtextColor,
+                                          ),
+                                          _buildBreakdownRow(
+                                            'Cash / Bank / Credit',
+                                            'Cash: ${b.cashTotal.toStringAsFixed(2)} · Bank: ${b.bankTotal.toStringAsFixed(2)} · Credit: ${b.creditTotal.toStringAsFixed(2)}',
+                                            textColor.withValues(alpha: 0.7),
+                                            subtextColor,
+                                          ),
+                                          _buildBreakdownRow(
+                                            'Zero Sale Count',
+                                            '${b.zeroSaleCount} visits',
+                                            Colors.redAccent,
+                                            subtextColor,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                          ] else ...[
+                            Card(
+                              color: cardBg,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                side: BorderSide(color: borderColor),
+                              ),
                               child: Padding(
-                                padding: const EdgeInsets.all(32.0),
+                                padding: const EdgeInsets.all(20.0),
                                 child: Column(
                                   children: [
                                     Icon(
-                                      LucideIcons.folderOpen,
+                                      LucideIcons.map,
                                       size: 48,
-                                      color: subtextColor,
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.8,
+                                      ),
                                     ),
                                     const SizedBox(height: 12),
-                                    Text(
-                                      'No visit records found for this date.',
+                                    const Text(
+                                      'Route Maps & GPS Tracks',
                                       style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Active tracking of all salesmen routes for today.',
+                                      style: TextStyle(
+                                        fontSize: 12,
                                         color: subtextColor,
-                                        fontSize: 13,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            )
-                          else
-                            ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: filteredRecords.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final record = filteredRecords[index];
-                                return _buildRecordCard(
-                                  index + 1,
-                                  record,
-                                  cardBg,
-                                  borderColor,
-                                  subtextColor,
-                                  filteredRecords,
-                                );
-                              },
                             ),
-                        ] else if (_innerTab == 1) ...[
-                          Card(
-                            color: cardBg,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(color: borderColor),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Salesman Performance',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  _buildBreakdownRow(
-                                    'Total Closed Shops',
-                                    '15 Shops',
-                                    Colors.green,
-                                    subtextColor,
-                                  ),
-                                  _buildBreakdownRow(
-                                    'Average Sale Value',
-                                    '340.00 SAR',
-                                    AppColors.primary,
-                                    subtextColor,
-                                  ),
-                                  _buildBreakdownRow(
-                                    'Productivity Rate',
-                                    '94.2%',
-                                    Colors.orange,
-                                    subtextColor,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ] else ...[
-                          Card(
-                            color: cardBg,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(color: borderColor),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(20.0),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    LucideIcons.map,
-                                    size: 48,
-                                    color: AppColors.primary.withValues(
-                                      alpha: 0.8,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  const Text(
-                                    'Route Maps & GPS Tracks',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Active tracking of all salesmen routes for today.',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: subtextColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 32),
+                          ],
+                          const SizedBox(height: 32),
+                        ]
                       ]),
                     ),
                   ),
@@ -695,8 +770,9 @@ class _SalesManagementAdminScreenState
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildStatCard(
     String label,
@@ -1210,28 +1286,39 @@ class _SalesManagementAdminScreenState
                   ),
                   const SizedBox(height: 8),
 
-                  // Open in Google Maps Link button
-                  InkWell(
-                    onTap: () => _launchMapsUrl(record.shopLocation),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          LucideIcons.externalLink,
-                          size: 14,
-                          color: AppColors.primary,
+                  // Actions: Open in Google Maps & Delete Visit Log
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      InkWell(
+                        onTap: () => _launchMapsUrl(record.shopLocation),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              LucideIcons.externalLink,
+                              size: 14,
+                              color: AppColors.primary,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Open in Google Maps',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
                         ),
-                        SizedBox(width: 4),
-                        Text(
-                          'Open in Google Maps',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(LucideIcons.trash2, size: 16, color: Colors.redAccent),
+                        onPressed: () => _showDeleteConfirmDialog(context, record),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1264,6 +1351,50 @@ class _SalesManagementAdminScreenState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmDialog(BuildContext context, VisitRecord record) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Visit Log', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text('Are you sure you want to delete the field visit log for "${record.shopName}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<SalesManagementAdminCubit>().deleteVisitRecord(record.id).then((_) {
+                toastification.show(
+                  context: context,
+                  type: ToastificationType.success,
+                  style: ToastificationStyle.flatColored,
+                  title: const Text('Success'),
+                  description: const Text('Field visit record deleted successfully.'),
+                  autoCloseDuration: const Duration(seconds: 4),
+                  showProgressBar: true,
+                );
+              }).catchError((e) {
+                toastification.show(
+                  context: context,
+                  type: ToastificationType.error,
+                  style: ToastificationStyle.flatColored,
+                  title: const Text('Delete Failed'),
+                  description: Text(e.toString().replaceFirst('Exception: ', '')),
+                  autoCloseDuration: const Duration(seconds: 4),
+                  showProgressBar: true,
+                );
+              });
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
@@ -1332,7 +1463,7 @@ class _SalesManagementAdminScreenState
   }
 }
 
-class HorizontalCalendarStrip extends StatelessWidget {
+class HorizontalCalendarStrip extends StatefulWidget {
   final DateTime selectedDate;
   final Function(DateTime) onDateSelected;
   final bool isDark;
@@ -1351,10 +1482,61 @@ class HorizontalCalendarStrip extends StatelessWidget {
   });
 
   @override
+  State<HorizontalCalendarStrip> createState() => _HorizontalCalendarStripState();
+}
+
+class _HorizontalCalendarStripState extends State<HorizontalCalendarStrip> {
+  late ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCenter());
+  }
+
+  @override
+  void didUpdateWidget(covariant HorizontalCalendarStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!DateUtils.isSameDay(oldWidget.selectedDate, widget.selectedDate)) {
+      _scrollToCenter();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToCenter() {
+    if (!_scrollController.hasClients) return;
+
+    // Each item is 52px wide + 8px right padding = 60px total
+    const itemWidth = 60.0;
+    // The selected item is always at index 7 (the center of 15 generated items)
+    const selectedIndex = 7;
+    final itemOffset = selectedIndex * itemWidth;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final targetScrollOffset = itemOffset - (screenWidth / 2.0) + (52.0 / 2.0);
+
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final minScroll = _scrollController.position.minScrollExtent;
+    final finalOffset = targetScrollOffset.clamp(minScroll, maxScroll);
+
+    _scrollController.animateTo(
+      finalOffset,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Generate a 15-day range centered around selectedDate
     final List<DateTime> dates = List.generate(15, (index) {
-      return selectedDate.subtract(Duration(days: 7 - index));
+      return widget.selectedDate.subtract(Duration(days: 7 - index));
     });
 
     return Column(
@@ -1364,11 +1546,11 @@ class HorizontalCalendarStrip extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              DateFormat('MMMM yyyy').format(selectedDate).toUpperCase(),
+              DateFormat('MMMM yyyy').format(widget.selectedDate).toUpperCase(),
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
-                color: textColor,
+                color: widget.textColor,
                 letterSpacing: 1.0,
               ),
             ),
@@ -1377,12 +1559,12 @@ class HorizontalCalendarStrip extends StatelessWidget {
               onPressed: () async {
                 final newDate = await showDatePicker(
                   context: context,
-                  initialDate: selectedDate,
+                  initialDate: widget.selectedDate,
                   firstDate: DateTime(2020),
                   lastDate: DateTime(2030),
                 );
                 if (newDate != null) {
-                  onDateSelected(newDate);
+                  widget.onDateSelected(newDate);
                 }
               },
             ),
@@ -1392,29 +1574,30 @@ class HorizontalCalendarStrip extends StatelessWidget {
         SizedBox(
           height: 68,
           child: ListView.builder(
+            controller: _scrollController,
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             itemCount: dates.length,
             itemBuilder: (context, index) {
               final date = dates[index];
-              final isSelected = DateUtils.isSameDay(date, selectedDate);
+              final isSelected = DateUtils.isSameDay(date, widget.selectedDate);
               final dayName = DateFormat('E').format(date); // Mon, Tue...
               final dayNum = DateFormat('d').format(date); // 29, 30...
 
               return Padding(
                 padding: const EdgeInsets.only(right: 8.0),
                 child: InkWell(
-                  onTap: () => onDateSelected(date),
+                  onTap: () => widget.onDateSelected(date),
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
                     width: 52,
                     decoration: BoxDecoration(
                       color: isSelected
                           ? AppColors.primaryGlow
-                          : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                          : (widget.isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: isSelected ? Colors.transparent : (isDark ? Colors.white10 : Colors.black12),
+                        color: isSelected ? Colors.transparent : (widget.isDark ? Colors.white10 : Colors.black12),
                       ),
                     ),
                     child: Column(
@@ -1425,7 +1608,7 @@ class HorizontalCalendarStrip extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.white70 : subtextColor,
+                            color: isSelected ? Colors.white70 : widget.subtextColor,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -1434,7 +1617,7 @@ class HorizontalCalendarStrip extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.white : textColor,
+                            color: isSelected ? Colors.white : widget.textColor,
                           ),
                         ),
                       ],
