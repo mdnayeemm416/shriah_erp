@@ -45,6 +45,9 @@ dependencies:
   flutter_launcher_icons: ^0.14.3
   flutter_native_splash: ^2.4.6
   image_picker: ^1.1.2
+  toastification: ^3.0.0
+  geolocator: ^13.0.1
+  geocoding: ^3.0.0
   dio: ^5.4.3+1
   pretty_dio_logger: ^1.4.0
   file_picker: ^11.0.3

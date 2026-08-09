@@ -23,6 +23,8 @@ import 'profit_summary/profit_summary_screen.dart';
 import 'employees/employees_screen.dart';
 import 'settings/settings_screen.dart';
 import 'login/login_screen.dart';
+import 'sales_management/sales_management_screen.dart';
+import 'sales_management_admin/sales_management_admin_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -53,6 +55,8 @@ class AppShellState extends State<AppShell> {
     ProfitSummaryScreen(),
     EmployeesScreen(),
     SettingsScreen(),
+    SalesManagementScreen(),
+    SalesManagementAdminScreen(),
   ];
 
   @override
@@ -275,6 +279,8 @@ class AppShellState extends State<AppShell> {
                 _buildSidebarItem(7, LucideIcons.calendarCheck, 'Daily Closing'),
                 _buildSidebarItem(8, LucideIcons.barChart, 'Profit Summary'),
                 _buildSidebarItem(9, LucideIcons.users, context.t('nav.employees')),
+                _buildSidebarItem(11, LucideIcons.userCheck, 'Sales Management'),
+                _buildSidebarItem(12, LucideIcons.shieldAlert, 'Sales Management Admin'),
                 _buildSidebarItem(10, LucideIcons.settings, context.t('nav.settings')),
               ],
             ),
@@ -492,6 +498,8 @@ class AppShellState extends State<AppShell> {
                 _buildDrawerItem(7, LucideIcons.calendarCheck, 'Daily Closing', isDark),
                 _buildDrawerItem(8, LucideIcons.barChart, 'Profit Summary', isDark),
                 _buildDrawerItem(9, LucideIcons.users, context.t('nav.employees'), isDark),
+                _buildDrawerItem(11, LucideIcons.userCheck, 'Sales Management', isDark),
+                _buildDrawerItem(12, LucideIcons.shieldAlert, 'Sales Management Admin', isDark),
                 _buildDrawerItem(10, LucideIcons.settings, context.t('nav.settings'), isDark),
               ],
             ),

@@ -16,6 +16,8 @@ import 'blocs/daily_closing/daily_closing_cubit.dart';
 import 'blocs/my_expenses/my_expenses_cubit.dart';
 import 'blocs/price_compare/price_compare_cubit.dart';
 import 'blocs/wholesale/wholesale_cubit.dart';
+import 'blocs/sales_management/sales_management_cubit.dart';
+import 'blocs/sales_management_admin/sales_management_admin_cubit.dart';
 
 import 'repositories/auth_repository.dart';
 import 'repositories/shop_repository.dart';
@@ -152,6 +154,12 @@ void main() async {
                 wholesaleRepo: context.read<WholesaleRepository>(),
                 productRepo: context.read<ProductRepository>(),
               )..loadAllData(),
+            ),
+            BlocProvider<SalesManagementCubit>(
+              create: (context) => SalesManagementCubit(),
+            ),
+            BlocProvider<SalesManagementAdminCubit>(
+              create: (context) => SalesManagementAdminCubit(),
             ),
           ],
           child: const MyApp(),

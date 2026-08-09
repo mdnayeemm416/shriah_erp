@@ -57,7 +57,7 @@ class WholesaleState {
   double get stockValuation {
     return products.fold(0.0, (sum, p) {
       final qty = p.stock > 0 ? p.stock : 0.0;
-      final cost = p.purchasePrice > 0 ? p.purchasePrice : p.price;
+      final cost = p.purchasePrice;
       return sum + (qty * cost);
     });
   }
