@@ -24,6 +24,15 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   final _salaryController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    final bloc = context.read<EmployeeBloc>();
+    if (bloc.state is EmployeeInitial) {
+      bloc.add(LoadEmployeesList());
+    }
+  }
+
+  @override
   void dispose() {
     _employeeNameController.dispose();
     _salaryController.dispose();

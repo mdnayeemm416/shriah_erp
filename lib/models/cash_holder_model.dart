@@ -17,7 +17,7 @@ class CashHolderModel extends HiveObject {
 
   factory CashHolderModel.fromJson(Map<String, dynamic> json) {
     return CashHolderModel(
-      name: json['name'] as String,
+      name: json['name'] as String? ?? 'Holder',
       amount: (json['amount'] as num? ?? 0.0).toDouble(),
     );
   }

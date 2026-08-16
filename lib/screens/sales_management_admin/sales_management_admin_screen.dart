@@ -878,29 +878,66 @@ class _SalesManagementAdminScreenState
 
   Future<void> _launchMapsUrl(String shopLocation) async {
     try {
-      String coords = '24.7136,46.6753';
+      if (shopLocation.trim().isEmpty) return;
+
+      String query = '';
       if (shopLocation.contains('|')) {
-        coords = shopLocation
-            .split('|')[0]
+        // Format: "24.7136,46.6753|Address" -> extract coordinates
+        final parts = shopLocation.split('|');
+        final coordPart = parts[0].trim();
+        query = coordPart
             .replaceAll('° N', '')
             .replaceAll('° E', '')
+            .replaceAll('°N', '')
+            .replaceAll('°E', '')
             .replaceAll('Lat:', '')
             .replaceAll('Lon:', '')
             .replaceAll(' ', '');
       } else {
-        coords = shopLocation
+        // Clean up standard coordinate prefixes/symbols
+        final clean = shopLocation
             .replaceAll('° N', '')
             .replaceAll('° E', '')
+            .replaceAll('°N', '')
+            .replaceAll('°E', '')
             .replaceAll('Lat:', '')
             .replaceAll('Lon:', '')
-            .replaceAll(' ', '');
+            .trim();
+
+        // Check if the cleaned string is coordinate-like (numbers, dots, commas, minus, plus, spaces)
+        final isCoordinates = RegExp(r'^[\d\s.,\-+]+$').hasMatch(clean);
+        if (isCoordinates) {
+          query = clean.replaceAll(' ', '');
+        } else {
+          // If it's a general address name, keep the spaces and pass it to maps
+          query = shopLocation.trim();
+        }
       }
-      final url = 'https://www.google.com/maps/search/?api=1&query=$coords';
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
+
+      if (query.isEmpty) {
+        query = '24.7136,46.6753'; // Default fallback
+      }
+
+      final uri = Uri.https('www.google.com', '/maps/search/', {
+        'api': '1',
+        'query': query,
+      });
+
+      // Try calling launchUrl directly first since canLaunchUrl might return false
+      // due to missing OS query configurations on some platforms.
+      try {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        // Fallback using canLaunchUrl just in case
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else {
+          debugPrint('Could not launch maps URL: $uri, error: $e');
+        }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error launching maps: $e');
+    }
   }
 
   void _showSalesmanSearchDialog(

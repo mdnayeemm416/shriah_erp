@@ -45,16 +45,18 @@ class CompanyTransactionModel extends HiveObject {
 
   factory CompanyTransactionModel.fromJson(Map<String, dynamic> json) {
     return CompanyTransactionModel(
-      id: json['id'] as String,
+      id: json['id'] as String? ?? '',
       amount: (json['amount'] as num? ?? 0.0).toDouble(),
       attachmentUrl: json['attachment_url'] as String?,
-      category: json['category'] as String,
+      category: json['category'] as String? ?? 'General',
       notes: json['notes'] as String?,
-      txnDate: DateTime.parse(json['txn_date'] as String),
-      txnType: json['txn_type'] as String,
+      txnDate: json['txn_date'] != null 
+          ? DateTime.tryParse(json['txn_date'] as String) ?? DateTime.now()
+          : DateTime.now(),
+      txnType: json['txn_type'] as String? ?? 'out',
       isDeleted: json['is_deleted'] as bool? ?? false,
       createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'] as String) 
+          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
           : DateTime.now(),
     );
   }

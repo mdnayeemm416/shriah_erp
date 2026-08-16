@@ -20,13 +20,24 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   String? _selectedShopId;
-  String _selectedEntryType = 'all'; // 'all' | 'sale' | 'purchase' | 'expense' | 'withdraw'
+  String _selectedEntryType =
+      'all'; // 'all' | 'sale' | 'purchase' | 'expense' | 'withdraw'
   final _searchController = TextEditingController();
   final _minAmountController = TextEditingController();
   final _maxAmountController = TextEditingController();
 
   List<ShopEntryModel> _filteredEntries = [];
   bool _filtersVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final bloc = context.read<ShopBloc>();
+    if (bloc.state is ShopInitial) {
+      bloc.add(LoadShops());
+      bloc.add(LoadShopEntries(shopId: 'all'));
+    }
+  }
 
   @override
   void dispose() {
@@ -77,7 +88,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   double _getAmount(ShopEntryModel e) {
-    if (e.entryType == 'sale') return e.posSale + e.cashSale + e.bankSale + e.creditSale;
+    if (e.entryType == 'sale')
+      return e.posSale + e.cashSale + e.bankSale + e.creditSale;
     if (e.entryType == 'purchase') return e.purchaseAmount;
     if (e.entryType == 'expense') return e.expenseAmount;
     if (e.entryType == 'withdraw') return e.withdrawAmount;
@@ -100,7 +112,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     // Trigger update if entries changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_filteredEntries.isEmpty && allEntries.isNotEmpty && _searchController.text.isEmpty) {
+      if (_filteredEntries.isEmpty &&
+          allEntries.isNotEmpty &&
+          _searchController.text.isEmpty) {
         _applyFilters(allEntries);
       }
     });
@@ -130,7 +144,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     context.t('nav.desc.reports'),
                     style: TextStyle(
                       fontSize: 14,
-                      color: isDark ? AppColors.mutedFgDark : AppColors.mutedFgLight,
+                      color: isDark
+                          ? AppColors.mutedFgDark
+                          : AppColors.mutedFgLight,
                     ),
                   ),
                 ],
@@ -139,7 +155,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
               OutlinedButton.icon(
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Report exported to Documents/ShRiAh_Report.xlsx')),
+                    const SnackBar(
+                      content: Text(
+                        'Report exported to Documents/ShRiAh_Report.xlsx',
+                      ),
+                    ),
                   );
                 },
                 icon: const Icon(LucideIcons.fileSpreadsheet, size: 16),
@@ -177,7 +197,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   backgroundColor: _filtersVisible
                       ? AppColors.primary.withAlpha(30)
                       : (isDark ? AppColors.mutedDark : AppColors.mutedLight),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   padding: const EdgeInsets.all(14),
                 ),
                 onPressed: () {
@@ -198,13 +220,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
           if (_filtersVisible) ...[
             const SizedBox(height: 16),
             Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Advanced Filters', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const Text(
+                      'Advanced Filters',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -214,11 +244,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             initialValue: _selectedShopId ?? 'all',
                             decoration: const InputDecoration(
                               labelText: 'Shop Location',
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                             ),
                             items: [
-                              const DropdownMenuItem(value: 'all', child: Text('All Shops')),
-                              ...shops.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))),
+                              const DropdownMenuItem(
+                                value: 'all',
+                                child: Text('All Shops'),
+                              ),
+                              ...shops.map(
+                                (s) => DropdownMenuItem(
+                                  value: s.id,
+                                  child: Text(s.name),
+                                ),
+                              ),
                             ],
                             onChanged: (val) {
                               setState(() {
@@ -235,14 +276,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             initialValue: _selectedEntryType,
                             decoration: const InputDecoration(
                               labelText: 'Entry Type',
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                             ),
                             items: const [
-                              DropdownMenuItem(value: 'all', child: Text('All Types')),
-                              DropdownMenuItem(value: 'sale', child: Text('Sales')),
-                              DropdownMenuItem(value: 'purchase', child: Text('Purchases')),
-                              DropdownMenuItem(value: 'expense', child: Text('Expenses')),
-                              DropdownMenuItem(value: 'withdraw', child: Text('Withdrawals')),
+                              DropdownMenuItem(
+                                value: 'all',
+                                child: Text('All Types'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'sale',
+                                child: Text('Sales'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'purchase',
+                                child: Text('Purchases'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'expense',
+                                child: Text('Expenses'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'withdraw',
+                                child: Text('Withdrawals'),
+                              ),
                             ],
                             onChanged: (val) {
                               setState(() {
@@ -264,7 +323,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                               labelText: 'Min Amount (SAR)',
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                             ),
                             onChanged: (_) => _applyFilters(allEntries),
                           ),
@@ -276,7 +338,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                               labelText: 'Max Amount (SAR)',
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                             ),
                             onChanged: (_) => _applyFilters(allEntries),
                           ),
@@ -297,7 +362,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(LucideIcons.clipboardList, size: 48, color: AppColors.mutedFgLight),
+                        Icon(
+                          LucideIcons.clipboardList,
+                          size: 48,
+                          color: AppColors.mutedFgLight,
+                        ),
                         SizedBox(height: 12),
                         Text('No records match your filter criteria.'),
                       ],
@@ -309,13 +378,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     itemBuilder: (context, index) {
                       final entry = _filteredEntries[index];
                       final amount = _getAmount(entry);
-                      final isOut = entry.entryType == 'purchase' ||
+                      final isOut =
+                          entry.entryType == 'purchase' ||
                           entry.entryType == 'expense' ||
                           entry.entryType == 'withdraw';
 
                       Color entryColor = AppColors.primary;
                       IconData entryIcon = LucideIcons.shoppingCart;
-                      
+
                       if (entry.entryType == 'purchase') {
                         entryColor = AppColors.warning;
                         entryIcon = LucideIcons.package;
@@ -328,10 +398,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       }
 
                       return Card(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-                          onTap: () => _showDetailsDialog(context, entry, amount),
+                          onTap: () =>
+                              _showDetailsDialog(context, entry, amount),
                           child: Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: Row(
@@ -339,12 +412,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 CircleAvatar(
                                   radius: 20,
                                   backgroundColor: entryColor.withAlpha(20),
-                                  child: Icon(entryIcon, color: entryColor, size: 20),
+                                  child: Icon(
+                                    entryIcon,
+                                    color: entryColor,
+                                    size: 20,
+                                  ),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         entry.entryType.toUpperCase(),
@@ -359,7 +437,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         entry.notes ?? 'No description notes',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontWeight: FontWeight.w600),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -371,13 +451,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       '${isOut ? '-' : '+'}${amount.toStringAsFixed(2)} SAR',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: isOut ? AppColors.destructive : AppColors.success,
+                                        color: isOut
+                                            ? AppColors.destructive
+                                            : AppColors.success,
                                         fontSize: 15,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      DateFormat('yyyy-MM-dd').format(entry.txnDate),
+                                      DateFormat(
+                                        'yyyy-MM-dd',
+                                      ).format(entry.txnDate),
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: AppColors.mutedFgLight,
@@ -398,23 +482,37 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  void _showDetailsDialog(BuildContext context, ShopEntryModel entry, double amount) {
+  void _showDetailsDialog(
+    BuildContext context,
+    ShopEntryModel entry,
+    double amount,
+  ) {
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Text('${entry.entryType.toUpperCase()} Detail View'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildDetailRow('Amount', '${amount.toStringAsFixed(2)} SAR'),
-              _buildDetailRow('Transaction Date', DateFormat('yyyy-MM-dd').format(entry.txnDate)),
+              _buildDetailRow(
+                'Transaction Date',
+                DateFormat('yyyy-MM-dd').format(entry.txnDate),
+              ),
               _buildDetailRow('Location Shop ID', entry.shopId),
-              if (entry.cashierId != null) _buildDetailRow('Cashier ID', entry.cashierId!),
-              _buildDetailRow('Created Stamp', DateFormat('yyyy-MM-dd HH:mm').format(entry.createdAt)),
-              if (entry.notes != null) _buildDetailRow('Description notes', entry.notes!),
+              if (entry.cashierId != null)
+                _buildDetailRow('Cashier ID', entry.cashierId!),
+              _buildDetailRow(
+                'Created Stamp',
+                DateFormat('yyyy-MM-dd HH:mm').format(entry.createdAt),
+              ),
+              if (entry.notes != null)
+                _buildDetailRow('Description notes', entry.notes!),
               if (entry.entryType == 'sale') ...[
                 const Divider(),
                 _buildDetailRow('  • POS Sale', '${entry.posSale} SAR'),
@@ -430,12 +528,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: const Text('Close'),
             ),
             IconButton(
-              icon: const Icon(LucideIcons.trash2, color: AppColors.destructive),
+              icon: const Icon(
+                LucideIcons.trash2,
+                color: AppColors.destructive,
+              ),
               onPressed: () {
                 context.read<ShopBloc>().add(DeleteEntry(entry.id));
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Transaction successfully deleted.')),
+                  const SnackBar(
+                    content: Text('Transaction successfully deleted.'),
+                  ),
                 );
               },
             ),
@@ -452,7 +555,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
         text: TextSpan(
           style: const TextStyle(fontSize: 14, color: Colors.black87),
           children: [
-            TextSpan(text: '$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             TextSpan(text: value),
           ],
         ),

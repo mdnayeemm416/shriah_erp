@@ -49,28 +49,38 @@ class ProductModel extends HiveObject {
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     return ProductModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      nameAr: json['name_ar'] as String?,
-      nameBn: json['name_bn'] as String?,
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? 'Product',
+      nameAr: json['nameAr'] as String? ?? json['name_ar'] as String?,
+      nameBn: json['nameBn'] as String? ?? json['name_bn'] as String?,
       barcode: json['barcode'] as String?,
-      itemCode: json['item_code'] as String?,
+      itemCode: json['itemCode'] as String? ?? json['item_code'] as String?,
       price: (json['price'] as num? ?? 0.0).toDouble(),
-      purchasePrice: (json['purchase_price'] as num? ?? 0.0).toDouble(),
+      purchasePrice: (json['purchasePrice'] as num? ?? json['purchase_price'] as num? ?? 0.0).toDouble(),
       stock: (json['stock'] as num? ?? 0.0).toDouble(),
-      minStock: (json['min_stock'] as num? ?? 5.0).toDouble(),
-      imageUrl: json['image_url'] as String?,
-      isDeleted: json['is_deleted'] as bool? ?? false,
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'] as String) 
-          : DateTime.now(),
-      comparePrice: (json['compare_price'] as num?)?.toDouble(),
-      taxRate: (json['tax_rate'] as num? ?? 15.0).toDouble(),
+      minStock: (json['minStock'] as num? ?? json['min_stock'] as num? ?? 5.0).toDouble(),
+      imageUrl: json['imageUrl'] as String? ?? json['image_url'] as String?,
+      isDeleted: json['isDeleted'] as bool? ?? json['is_deleted'] as bool? ?? false,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
+          : (json['created_at'] != null 
+              ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
+              : DateTime.now()),
+      comparePrice: (json['comparePrice'] as num? ?? json['compare_price'] as num?)?.toDouble(),
+      taxRate: (json['taxRate'] as num? ?? json['tax_rate'] as num? ?? 15.0).toDouble(),
       description: json['description'] as String?,
-      categoryIds: (json['category_ids'] as List?)?.cast<String>(),
-      isVisibleOnWebsite: json['is_visible_on_website'] as bool? ?? true,
-      isFeatured: json['is_featured'] as bool? ?? false,
-      showStock: json['show_stock'] as bool? ?? true,
+      categoryIds: json['categoryIds'] is List
+          ? (json['categoryIds'] as List).cast<String>()
+          : (json['category_ids'] is List
+              ? (json['category_ids'] as List).cast<String>()
+              : (json['categoryId'] is String
+                  ? [json['categoryId'] as String]
+                  : (json['category_id'] is String
+                      ? [json['category_id'] as String]
+                      : null))),
+      isVisibleOnWebsite: json['isVisibleOnWebsite'] as bool? ?? json['is_visible_on_website'] as bool? ?? true,
+      isFeatured: json['isFeatured'] as bool? ?? json['is_featured'] as bool? ?? false,
+      showStock: json['showStock'] as bool? ?? json['show_stock'] as bool? ?? true,
       images: (json['images'] as List?)?.cast<String>(),
     );
   }
@@ -79,23 +89,41 @@ class ProductModel extends HiveObject {
     return {
       'id': id,
       'name': name,
+      'nameAr': nameAr,
       'name_ar': nameAr,
+      'nameBn': nameBn,
       'name_bn': nameBn,
       'barcode': barcode,
+      'itemCode': itemCode,
       'item_code': itemCode,
       'price': price,
+      'purchasePrice': purchasePrice,
       'purchase_price': purchasePrice,
       'stock': stock,
+      'minStock': minStock,
       'min_stock': minStock,
+      'imageUrl': imageUrl,
       'image_url': imageUrl,
+      'isDeleted': isDeleted,
       'is_deleted': isDeleted,
+      'createdAt': createdAt.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
+      'comparePrice': comparePrice,
       'compare_price': comparePrice,
+      'taxRate': taxRate,
       'tax_rate': taxRate,
       'description': description,
+      'categoryIds': categoryIds,
       'category_ids': categoryIds,
+      if (categoryIds != null && categoryIds!.isNotEmpty) ...{
+        'categoryId': categoryIds!.first,
+        'category_id': categoryIds!.first,
+      },
+      'isVisibleOnWebsite': isVisibleOnWebsite,
       'is_visible_on_website': isVisibleOnWebsite,
+      'isFeatured': isFeatured,
       'is_featured': isFeatured,
+      'showStock': showStock,
       'show_stock': showStock,
       'images': images,
     };

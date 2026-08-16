@@ -37,7 +37,10 @@ class AuthRepository {
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{};
 
-      if (response.statusCode == 200 && res['success'] == true && res['data'] != null && res['data']['user'] != null) {
+      if (response.statusCode == 200 &&
+          res['success'] == true &&
+          res['data'] != null &&
+          res['data']['user'] != null) {
         final token = res['data']['token'] as String?;
         if (token != null) {
           await _apiClient.setToken(token);
@@ -47,10 +50,9 @@ class AuthRepository {
         final user = UserModel.fromJson(userMap);
         _currentUser = user;
 
+        // Hive is ONLY used to persist auth credentials for remember-me
         final box = await Hive.openBox(_authBoxName);
-        await box.put('user_profile', user.toJson());
         await box.put('remember_me', rememberMe);
-
         if (rememberMe) {
           await box.put('saved_identifier', identifier);
           await box.put('saved_password', password);
@@ -61,7 +63,8 @@ class AuthRepository {
 
         return user;
       } else {
-        final errorMsg = res['message'] as String? ?? 'Invalid credentials or server error (${response.statusCode})';
+        final errorMsg = res['message'] as String? ??
+            'Invalid credentials or server error (${response.statusCode})';
         throw Exception(errorMsg);
       }
     } catch (e) {
@@ -76,7 +79,11 @@ class AuthRepository {
     final password = box.get('saved_password') as String?;
     final rememberMe = box.get('remember_me') as bool? ?? false;
 
-    if (rememberMe && identifier != null && identifier.isNotEmpty && password != null && password.isNotEmpty) {
+    if (rememberMe &&
+        identifier != null &&
+        identifier.isNotEmpty &&
+        password != null &&
+        password.isNotEmpty) {
       return {
         'identifier': identifier,
         'password': password,
@@ -90,7 +97,8 @@ class AuthRepository {
     required String password,
     required String fullName,
   }) async {
-    throw Exception('Registration disabled. Please contact system administrator.');
+    throw Exception(
+        'Registration disabled. Please contact system administrator.');
   }
 
   Future<void> signOut() async {

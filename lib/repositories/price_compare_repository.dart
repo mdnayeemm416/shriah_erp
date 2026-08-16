@@ -1,106 +1,96 @@
-import 'package:hive_flutter/hive_flutter.dart';
 import '../core/api/api_client.dart';
 import '../core/api/endpoints/api_endpoints.dart';
 import '../models/price_compare_models.dart';
 
 class PriceCompareRepository {
-  static const String _productsBoxName = 'price_compare_products';
-  static const String _recordsBoxName = 'price_compare_records';
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    final productAdapter = PriceCompareProductModelAdapter();
-    final recordAdapter = PriceCompareRecordModelAdapter();
-
-    if (!Hive.isAdapterRegistered(productAdapter.typeId)) {
-      Hive.registerAdapter(productAdapter);
-    }
-    if (!Hive.isAdapterRegistered(recordAdapter.typeId)) {
-      Hive.registerAdapter(recordAdapter);
-    }
-
-    await Hive.openBox<PriceCompareProductModel>(_productsBoxName);
-    await Hive.openBox<PriceCompareRecordModel>(_recordsBoxName);
+    // No local storage — all data comes from API
   }
 
   Future<List<Map<String, dynamic>>> getRemotePriceCompares() async {
     final list = <Map<String, dynamic>>[];
-    try {
-      final remoteList = await _apiClient.getList(ApiEndpoints.wholesalePriceCompares);
-      if (remoteList != null) {
-        for (final item in remoteList) {
-          if (item is Map<String, dynamic>) {
-            list.add(item);
-          }
+    final remoteList =
+        await _apiClient.getList(ApiEndpoints.wholesalePriceCompares);
+    if (remoteList != null) {
+      for (final item in remoteList) {
+        if (item is Map<String, dynamic>) {
+          list.add(item);
         }
       }
-    } catch (_) {}
+    }
     return list;
   }
 
   Future<List<PriceCompareProductModel>> getProducts() async {
-    final box = Hive.box<PriceCompareProductModel>(_productsBoxName);
-    return box.values.where((p) => !p.isDeleted).toList();
+    final remoteList =
+        await _apiClient.getList(ApiEndpoints.wholesalePriceCompares);
+    if (remoteList != null) {
+      final list = <PriceCompareProductModel>[];
+      for (final item in remoteList) {
+        if (item is Map<String, dynamic>) {
+          final p = PriceCompareProductModel.fromJson(item);
+          if (!p.isDeleted) list.add(p);
+        }
+      }
+      return list;
+    }
+    return [];
   }
 
-  Future<PriceCompareProductModel?> getProductByBarcode(String barcode) async {
-    final box = Hive.box<PriceCompareProductModel>(_productsBoxName);
+  Future<PriceCompareProductModel?> getProductByBarcode(
+      String barcode) async {
+    final products = await getProducts();
     try {
-      return box.values.firstWhere((p) => !p.isDeleted && p.barcode == barcode);
+      return products.firstWhere((p) => p.barcode == barcode);
     } catch (_) {
       return null;
     }
   }
 
   Future<void> saveProduct(PriceCompareProductModel product) async {
-    final box = Hive.box<PriceCompareProductModel>(_productsBoxName);
-    await box.put(product.id, product);
+    await _apiClient.postMap(
+        ApiEndpoints.wholesalePriceCompares, product.toJson());
   }
 
   Future<void> deleteProduct(String id) async {
-    final box = Hive.box<PriceCompareProductModel>(_productsBoxName);
-    final product = box.get(id);
-    if (product != null) {
-      await box.put(id, product.copyWith(isDeleted: true));
-      
-      final recordsBox = Hive.box<PriceCompareRecordModel>(_recordsBoxName);
-      final associated = recordsBox.values.where((r) => r.productId == id).toList();
-      for (final r in associated) {
-        await recordsBox.put(r.id, r.copyWith(isDeleted: true));
-      }
-    }
+    await _apiClient
+        .deleteBool('${ApiEndpoints.wholesalePriceCompares}/$id');
   }
 
   Future<List<PriceCompareRecordModel>> getRecords(String productId) async {
-    final box = Hive.box<PriceCompareRecordModel>(_recordsBoxName);
-    final list = box.values
-        .where((r) => r.productId == productId && !r.isDeleted)
-        .toList();
-    list.sort((a, b) => b.recordDate.compareTo(a.recordDate));
-    return list;
+    final remoteList = await _apiClient.getList(
+        '${ApiEndpoints.wholesalePriceCompares}/$productId/records');
+    if (remoteList != null) {
+      final list = <PriceCompareRecordModel>[];
+      for (final item in remoteList) {
+        if (item is Map<String, dynamic>) {
+          final r = PriceCompareRecordModel.fromJson(item);
+          if (!r.isDeleted) list.add(r);
+        }
+      }
+      list.sort((a, b) => b.recordDate.compareTo(a.recordDate));
+      return list;
+    }
+    return [];
   }
 
   Future<void> saveRecord(PriceCompareRecordModel record) async {
-    final box = Hive.box<PriceCompareRecordModel>(_recordsBoxName);
-    await box.put(record.id, record);
+    await _apiClient.postMap(
+      '${ApiEndpoints.wholesalePriceCompares}/${record.productId}/records',
+      record.toJson(),
+    );
   }
 
   Future<void> deleteRecord(String id) async {
-    final box = Hive.box<PriceCompareRecordModel>(_recordsBoxName);
-    final record = box.get(id);
-    if (record != null) {
-      await box.put(id, record.copyWith(isDeleted: true));
-    }
+    await _apiClient.deleteBool(
+        '${ApiEndpoints.wholesalePriceCompares}/records/$id');
   }
 
   Future<List<String>> listSuppliers() async {
-    final box = Hive.box<PriceCompareRecordModel>(_recordsBoxName);
-    final suppliers = box.values
-        .where((r) => !r.isDeleted && r.supplier.isNotEmpty)
-        .map((r) => r.supplier)
-        .toSet()
-        .toList();
-    suppliers.sort();
-    return suppliers;
+    // Suppliers would come from records — fetch all records for all products
+    // For now return empty; extend if API supports a dedicated endpoint
+    return [];
   }
 }

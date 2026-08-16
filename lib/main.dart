@@ -74,17 +74,7 @@ void main() async {
     final openingBalanceRepo = OpeningBalanceRepository();
     final salesVisitRepo = SalesVisitRepository();
 
-    // 2. Initialize Hive schemas & API sync repositories
-    await shopRepo.initialize();
-    await employeeRepo.initialize();
-    await productRepo.initialize();
-    await companyRepo.initialize();
-    await cashSnapshotRepo.initialize();
-    await dailyClosingRepo.initialize();
-    await employeeExpenseRepo.initialize();
-    await priceCompareRepo.initialize();
-    await wholesaleRepo.initialize();
-    await openingBalanceRepo.initialize();
+    // Repositories are now pure API — no Hive initialization needed
 
     runApp(
       MultiRepositoryProvider(
@@ -127,11 +117,11 @@ void main() async {
             BlocProvider<WorkingDateCubit>(create: (_) => WorkingDateCubit()),
             BlocProvider<AuthCubit>(create: (context) => AuthCubit(authRepo)),
             BlocProvider<ShopBloc>(
-              create: (context) => ShopBloc(shopRepo)..add(LoadShops()),
+              create: (context) => ShopBloc(shopRepo),
             ),
             BlocProvider<EmployeeBloc>(
               create: (context) =>
-                  EmployeeBloc(employeeRepo)..add(LoadEmployeesList()),
+                  EmployeeBloc(employeeRepo),
             ),
             BlocProvider<DailyClosingCubit>(
               create: (context) => DailyClosingCubit(
@@ -150,13 +140,13 @@ void main() async {
             BlocProvider<PriceCompareCubit>(
               create: (context) => PriceCompareCubit(
                 compareRepo: context.read<PriceCompareRepository>(),
-              )..loadProducts(),
+              ),
             ),
             BlocProvider<WholesaleCubit>(
               create: (context) => WholesaleCubit(
                 wholesaleRepo: context.read<WholesaleRepository>(),
                 productRepo: context.read<ProductRepository>(),
-              )..loadAllData(),
+              ),
             ),
             BlocProvider<SalesManagementCubit>(
               create: (context) => SalesManagementCubit(

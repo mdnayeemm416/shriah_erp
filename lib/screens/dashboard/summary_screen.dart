@@ -89,18 +89,89 @@ class _SummaryScreenState extends State<SummaryScreen> {
       final wholesaleRepo = context.read<WholesaleRepository>();
       final openingBalanceRepo = context.read<OpeningBalanceRepository>();
 
-      final shops = await shopRepo.getShops();
-      final shopEntries = await shopRepo.getEntries();
-      final employeeEntries = await employeeRepo.getEntries();
-      final companyTxns = await companyRepo.getTransactions();
-      final products = await productRepo.getProducts();
-      final snapshots = await snapshotRepo.getSnapshots();
-      final holders = await snapshotRepo.getCurrentHolders();
-      final wholesaleCustomers = await wholesaleRepo.getCustomers();
-      final wholesaleSales = await wholesaleRepo.getSales();
-      final wholesalePayments = await wholesaleRepo.getPayments();
-      final remoteSummary = await wholesaleRepo.getDashboardSummary();
-      final openingBalanceModel = await openingBalanceRepo.getOpeningBalance();
+      final List<ShopModel> shops;
+      try {
+        shops = await shopRepo.getShops();
+      } catch (e) {
+        throw Exception('Error loading shops: $e');
+      }
+
+      final List<ShopEntryModel> shopEntries;
+      try {
+        shopEntries = await shopRepo.getEntries();
+      } catch (e) {
+        throw Exception('Error loading shop entries: $e');
+      }
+
+      final List<EmployeeEntryModel> employeeEntries;
+      try {
+        employeeEntries = await employeeRepo.getEntries();
+      } catch (e) {
+        throw Exception('Error loading employee entries: $e');
+      }
+
+      final List<CompanyTransactionModel> companyTxns;
+      try {
+        companyTxns = await companyRepo.getTransactions();
+      } catch (e) {
+        throw Exception('Error loading company transactions: $e');
+      }
+
+      final List<ProductModel> products;
+      try {
+        products = await productRepo.getProducts();
+      } catch (e) {
+        throw Exception('Error loading products: $e');
+      }
+
+      final List<CashInHandSnapshotModel> snapshots;
+      try {
+        snapshots = await snapshotRepo.getSnapshots();
+      } catch (e) {
+        throw Exception('Error loading cash snapshots: $e');
+      }
+
+      final List<CashHolderModel> holders;
+      try {
+        holders = await snapshotRepo.getCurrentHolders();
+      } catch (e) {
+        throw Exception('Error loading cash holders: $e');
+      }
+
+      final List<WholesaleCustomerModel> wholesaleCustomers;
+      try {
+        wholesaleCustomers = await wholesaleRepo.getCustomers();
+      } catch (e) {
+        throw Exception('Error loading wholesale customers: $e');
+      }
+
+      final List<WholesaleSaleModel> wholesaleSales;
+      try {
+        wholesaleSales = await wholesaleRepo.getSales();
+      } catch (e) {
+        throw Exception('Error loading wholesale sales: $e');
+      }
+
+      final List<WholesalePaymentModel> wholesalePayments;
+      try {
+        wholesalePayments = await wholesaleRepo.getPayments();
+      } catch (e) {
+        throw Exception('Error loading wholesale payments: $e');
+      }
+
+      final Map<String, dynamic>? remoteSummary;
+      try {
+        remoteSummary = await wholesaleRepo.getDashboardSummary();
+      } catch (e) {
+        throw Exception('Error loading dashboard summary: $e');
+      }
+
+      final OpeningBalanceModel? openingBalanceModel;
+      try {
+        openingBalanceModel = await openingBalanceRepo.getOpeningBalance();
+      } catch (e) {
+        throw Exception('Error loading opening balance: $e');
+      }
 
       _disposeControllers();
 
@@ -140,8 +211,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   // --- Dynamic Getters calculated from active month of Working Date ---
 
   DateTime get _workingDate {
-    // Listen to WorkingDateCubit state changes
-    return context.watch<WorkingDateCubit>().state;
+    return context.read<WorkingDateCubit>().state;
   }
 
   DateTime get _monthStart =>
@@ -195,76 +265,55 @@ class _SummaryScreenState extends State<SummaryScreen> {
   }
 
   double get _totalShopCashPosition {
-    double sum = 0.0;
-    for (final shop in _shops) {
-      sum += _getShopPosition(shop);
+    if (_remoteSummary != null && _remoteSummary!['totalShopCashPosition'] != null) {
+      return (_remoteSummary!['totalShopCashPosition'] as num).toDouble();
     }
-    return sum;
+    return 0.0;
   }
 
   double get _currentStockValue {
-    double sum = 0.0;
-    for (final p in _products) {
-      sum += p.stock * p.purchasePrice;
+    if (_remoteSummary != null && _remoteSummary!['inventoryValue'] != null) {
+      return (_remoteSummary!['inventoryValue'] as num).toDouble();
     }
-    return sum;
+    return 0.0;
   }
 
   double get _wholesaleReceivables {
-    final openingDues = _wholesaleCustomers.fold(
-      0.0,
-      (sum, c) => sum + c.openingDue,
-    );
-    final salesDues = _wholesaleSales
-        .where((s) => s.status != 'cancelled')
-        .fold(0.0, (sum, s) => sum + s.dueAmount);
-    final paymentsIn = _wholesalePayments
-        .where((p) => p.kind == 'payment_in')
-        .fold(0.0, (sum, p) => sum + p.amount);
-    final total = openingDues + salesDues - paymentsIn;
-    return total > 0 ? total : 0.0;
+    if (_remoteSummary != null && _remoteSummary!['totalReceivables'] != null) {
+      return (_remoteSummary!['totalReceivables'] as num).toDouble();
+    }
+    return 0.0;
   }
 
-  double get _wholesaleCurrentValue =>
-      _currentStockValue + _wholesaleReceivables;
+  double get _wholesaleCurrentValue {
+    if (_remoteSummary != null && _remoteSummary!['wholesaleCurrentValue'] != null) {
+      return (_remoteSummary!['wholesaleCurrentValue'] as num).toDouble();
+    }
+    return 0.0;
+  }
 
   double get _employeeOutstanding {
-    double given = 0.0;
-    double received = 0.0;
-    for (final e in _employeeEntries) {
-      if (e.entryType == 'give') {
-        given += e.amount;
-      } else if (e.entryType == 'receive') {
-        received += e.amount;
-      }
+    if (_remoteSummary != null && _remoteSummary!['employeeOutstanding'] != null) {
+      return (_remoteSummary!['employeeOutstanding'] as num).toDouble();
     }
-    return given - received;
+    return 0.0;
   }
 
   double get _currentCompanyBalance {
-    double opening = 0.0;
-    double income = 0.0;
-    double expense = 0.0;
-    for (final t in _companyTxns) {
-      if (!_isInRange(t.txnDate, _monthStart, _monthEnd)) continue;
-      if (t.txnType == 'in') {
-        income += t.amount;
-      } else if (t.txnType == 'out') {
-        expense += t.amount;
-      }
+    if (_remoteSummary != null && _remoteSummary!['currentCompanyBalance'] != null) {
+      return (_remoteSummary!['currentCompanyBalance'] as num).toDouble();
     }
-    return opening + income - expense;
+    return 0.0;
   }
 
   double get _openingCapital {
     if (_openingBalanceModel != null && _openingBalanceModel!.amount > 0) {
       return _openingBalanceModel!.amount;
     }
-    if (_remoteSummary != null &&
-        _remoteSummary!['companyOpeningCapital'] != null) {
+    if (_remoteSummary != null && _remoteSummary!['companyOpeningCapital'] != null) {
       return (_remoteSummary!['companyOpeningCapital'] as num).toDouble();
     }
-    return _companyOpeningCapital;
+    return 0.0;
   }
 
   Future<void> _showEditOpeningBalanceDialog() async {
@@ -747,11 +796,19 @@ class _SummaryScreenState extends State<SummaryScreen> {
     );
   }
 
-  double get _totalInvest =>
-      _openingCapital + _totalShopCashPosition + _currentCompanyBalance;
+  double get _totalInvest {
+    if (_remoteSummary != null && _remoteSummary!['totalInvest'] != null) {
+      return (_remoteSummary!['totalInvest'] as num).toDouble();
+    }
+    return 0.0;
+  }
 
-  double get _totalCashInApp =>
-      _totalInvest - _wholesaleCurrentValue - _employeeOutstanding;
+  double get _totalCashInApp {
+    if (_remoteSummary != null && _remoteSummary!['totalCashInApp'] != null) {
+      return (_remoteSummary!['totalCashInApp'] as num).toDouble();
+    }
+    return 0.0;
+  }
 
   double get _totalCashInHand => _holders.fold(0.0, (sum, h) => sum + h.amount);
 
@@ -1136,6 +1193,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen to WorkingDateCubit to rebuild screen on date changes
+    context.watch<WorkingDateCubit>();
+
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }

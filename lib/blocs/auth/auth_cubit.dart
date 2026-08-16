@@ -1,7 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'auth_state.dart';
-import '../../models/user_model.dart';
 import '../../repositories/auth_repository.dart';
 
 class AuthCubit extends Cubit<AuthState> {
@@ -25,19 +23,8 @@ class AuthCubit extends Cubit<AuthState> {
           emit(AuthAuthenticated(user));
           return;
         } catch (_) {
-          // If online login fails (e.g. offline/network issue), check cached session
+          // Saved credentials failed — force re-login
         }
-      }
-
-      final box = await Hive.openBox('auth');
-      final token = box.get('auth_token') as String?;
-      final userProfileMap = box.get('user_profile');
-
-      if (token != null && token.isNotEmpty && userProfileMap is Map) {
-        final user = UserModel.fromJson(Map<String, dynamic>.from(userProfileMap));
-        authRepository.setCurrentUser(user);
-        emit(AuthAuthenticated(user));
-        return;
       }
       emit(AuthUnauthenticated());
     } catch (_) {

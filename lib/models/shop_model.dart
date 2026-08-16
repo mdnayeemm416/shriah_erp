@@ -53,14 +53,14 @@ class ShopModel extends HiveObject {
 
   factory ShopModel.fromJson(Map<String, dynamic> json) {
     return ShopModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? 'Shop',
       shopType: (json['shopType'] ?? json['shop_type']) as String?,
       isDeleted: (json['isDeleted'] ?? json['is_deleted']) as bool? ?? false,
       createdAt: json['createdAt'] != null 
-          ? DateTime.parse(json['createdAt'] as String) 
+          ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
           : (json['created_at'] != null 
-              ? DateTime.parse(json['created_at'] as String) 
+              ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
               : DateTime.now()),
       openingCash: ((json['openingBalance'] ?? json['opening_balance'] ?? json['opening_cash']) as num?)?.toDouble(),
       cashPosition: ((json['cashPosition'] ?? json['cash_position']) as num?)?.toDouble(),

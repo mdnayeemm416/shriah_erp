@@ -1,101 +1,69 @@
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:uuid/uuid.dart';
 import '../core/api/api_client.dart';
 import '../core/api/endpoints/api_endpoints.dart';
 import '../models/employee_model.dart';
 import '../models/employee_entry_model.dart';
 
 class EmployeeRepository {
-  static const String _employeesBoxName = 'employees';
-  static const String _entriesBoxName = 'employee_entries';
   final ApiClient _apiClient = ApiClient();
 
   Future<void> initialize() async {
-    final employeeAdapter = EmployeeModelAdapter();
-    final employeeEntryAdapter = EmployeeEntryModelAdapter();
-
-    if (!Hive.isAdapterRegistered(employeeAdapter.typeId)) {
-      Hive.registerAdapter(employeeAdapter);
-    }
-    if (!Hive.isAdapterRegistered(employeeEntryAdapter.typeId)) {
-      Hive.registerAdapter(employeeEntryAdapter);
-    }
-    await Hive.openBox<EmployeeModel>(_employeesBoxName);
-    await Hive.openBox<EmployeeEntryModel>(_entriesBoxName);
+    // No local storage — all data comes from API
   }
 
   // --- CRUD for Employees ---
   Future<List<EmployeeModel>> getEmployees({String? shopId}) async {
-    final box = Hive.box<EmployeeModel>(_employeesBoxName);
-    
-    try {
-      final remoteList = await _apiClient.getList(ApiEndpoints.employees);
-      if (remoteList != null) {
-        await box.clear();
-        for (final item in remoteList) {
-          if (item is Map<String, dynamic>) {
-            final emp = EmployeeModel.fromJson(item);
-            if (emp.id.isNotEmpty) {
-              await box.put(emp.id, emp);
-            }
+    final remoteList = await _apiClient.getList(ApiEndpoints.employees);
+    if (remoteList != null) {
+      final list = <EmployeeModel>[];
+      for (final item in remoteList) {
+        if (item is Map<String, dynamic>) {
+          final emp = EmployeeModel.fromJson(item);
+          if (!emp.isDeleted) {
+            list.add(emp);
           }
         }
       }
-    } catch (_) {}
-
-    var list = box.values.where((e) => !e.isDeleted);
-    if (shopId != null) {
-      list = list.where((e) => e.shopId == shopId);
+      if (shopId != null) {
+        return list.where((e) => e.shopId == shopId).toList();
+      }
+      return list;
     }
-    return list.toList();
+    return [];
   }
 
   Future<void> saveEmployee(EmployeeModel employee) async {
-    final box = Hive.box<EmployeeModel>(_employeesBoxName);
-    await box.put(employee.id, employee);
-
-    try {
-      await _apiClient.postMap(ApiEndpoints.employees, employee.toJson());
-    } catch (_) {}
+    await _apiClient.postMap(ApiEndpoints.employees, employee.toJson());
   }
 
   // --- CRUD for Entries ---
   Future<List<EmployeeEntryModel>> getEntries({String? employeeId}) async {
-    final box = Hive.box<EmployeeEntryModel>(_entriesBoxName);
-    try {
-      final remoteList = await _apiClient.getList(ApiEndpoints.employeeEntries);
-      if (remoteList != null && remoteList.isNotEmpty) {
-        for (final item in remoteList) {
-          if (item is Map<String, dynamic>) {
-            final entry = EmployeeEntryModel.fromJson(item);
-            await box.put(entry.id, entry);
+    final remoteList = await _apiClient.getList(ApiEndpoints.employeeEntries);
+    if (remoteList != null) {
+      final list = <EmployeeEntryModel>[];
+      for (final item in remoteList) {
+        if (item is Map<String, dynamic>) {
+          final entry = EmployeeEntryModel.fromJson(item);
+          if (!entry.isDeleted) {
+            list.add(entry);
           }
         }
       }
-    } catch (_) {}
-
-    var query = box.values.where((e) => !e.isDeleted);
-    
-    if (employeeId != null) {
-      query = query.where((e) => e.employeeId == employeeId);
+      if (employeeId != null) {
+        return list
+            .where((e) => e.employeeId == employeeId)
+            .toList()
+          ..sort((a, b) => b.txnDate.compareTo(a.txnDate));
+      }
+      return list..sort((a, b) => b.txnDate.compareTo(a.txnDate));
     }
-    
-    return query.toList()..sort((a, b) => b.txnDate.compareTo(a.txnDate));
+    return [];
   }
 
   Future<void> saveEntry(EmployeeEntryModel entry) async {
-    final box = Hive.box<EmployeeEntryModel>(_entriesBoxName);
-    await box.put(entry.id, entry);
-    try {
-      await _apiClient.postMap(ApiEndpoints.employeeEntries, entry.toJson());
-    } catch (_) {}
+    await _apiClient.postMap(ApiEndpoints.employeeEntries, entry.toJson());
   }
 
   Future<void> deleteEntry(String id) async {
-    final box = Hive.box<EmployeeEntryModel>(_entriesBoxName);
-    final entry = box.get(id);
-    if (entry != null) {
-      await box.put(id, entry.copyWith(isDeleted: true));
-    }
+    await _apiClient.deleteBool('${ApiEndpoints.employeeEntries}/$id');
   }
 }

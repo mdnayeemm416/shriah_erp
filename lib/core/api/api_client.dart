@@ -47,7 +47,7 @@ class ApiClient {
         requestHeader: true,
         requestBody: true,
         responseBody: true,
-        responseHeader: false,
+        responseHeader: true,
         error: true,
         compact: true,
         maxWidth: 90,
@@ -86,7 +86,12 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) {
-    return dio.post<T>(path, data: data, queryParameters: queryParameters, options: options);
+    return dio.post<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      options: options,
+    );
   }
 
   Future<Response<T>> put<T>(
@@ -95,7 +100,12 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) {
-    return dio.put<T>(path, data: data, queryParameters: queryParameters, options: options);
+    return dio.put<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      options: options,
+    );
   }
 
   Future<Response<T>> delete<T>(
@@ -104,12 +114,20 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) {
-    return dio.delete<T>(path, data: data, queryParameters: queryParameters, options: options);
+    return dio.delete<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      options: options,
+    );
   }
 
   // --- Generic Typed Helper Methods for Repositories ---
 
-  Future<List<dynamic>?> getList(String path, {Map<String, dynamic>? queryParameters}) async {
+  Future<List<dynamic>?> getList(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
     try {
       final response = await get(path, queryParameters: queryParameters);
       if (response.statusCode == 200 && response.data is Map) {
@@ -123,19 +141,26 @@ class ApiClient {
         }
       } else if (response.data is Map) {
         final body = response.data as Map;
-        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${response.statusCode}',
+        );
       }
     } on DioException catch (e) {
       if (e.response?.data is Map) {
         final body = Map<String, dynamic>.from(e.response!.data as Map);
-        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${e.response?.statusCode}',
+        );
       }
       rethrow;
     }
     return null;
   }
 
-  Future<Map<String, dynamic>?> getMap(String path, {Map<String, dynamic>? queryParameters}) async {
+  Future<Map<String, dynamic>?> getMap(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
     try {
       final response = await get(path, queryParameters: queryParameters);
       if (response.statusCode == 200 && response.data is Map) {
@@ -149,22 +174,30 @@ class ApiClient {
         }
       } else if (response.data is Map) {
         final body = response.data as Map;
-        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${response.statusCode}',
+        );
       }
     } on DioException catch (e) {
       if (e.response?.data is Map) {
         final body = Map<String, dynamic>.from(e.response!.data as Map);
-        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${e.response?.statusCode}',
+        );
       }
       rethrow;
     }
     return null;
   }
 
-  Future<Map<String, dynamic>?> postMap(String path, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>?> postMap(
+    String path,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await post(path, data: data);
-      if ((response.statusCode == 200 || response.statusCode == 201) && response.data is Map) {
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          response.data is Map) {
         final body = Map<String, dynamic>.from(response.data as Map);
         if (body['success'] == false) {
           throw Exception(body['message'] ?? 'API request failed');
@@ -172,22 +205,30 @@ class ApiClient {
         return body;
       } else if (response.data is Map) {
         final body = Map<String, dynamic>.from(response.data as Map);
-        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${response.statusCode}',
+        );
       }
     } on DioException catch (e) {
       if (e.response?.data is Map) {
         final body = Map<String, dynamic>.from(e.response!.data as Map);
-        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${e.response?.statusCode}',
+        );
       }
       rethrow;
     }
     return null;
   }
 
-  Future<Map<String, dynamic>?> putMap(String path, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>?> putMap(
+    String path,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await put(path, data: data);
-      if ((response.statusCode == 200 || response.statusCode == 201) && response.data is Map) {
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          response.data is Map) {
         final body = Map<String, dynamic>.from(response.data as Map);
         if (body['success'] == false) {
           throw Exception(body['message'] ?? 'API request failed');
@@ -195,12 +236,16 @@ class ApiClient {
         return body;
       } else if (response.data is Map) {
         final body = Map<String, dynamic>.from(response.data as Map);
-        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${response.statusCode}',
+        );
       }
     } on DioException catch (e) {
       if (e.response?.data is Map) {
         final body = Map<String, dynamic>.from(e.response!.data as Map);
-        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${e.response?.statusCode}',
+        );
       }
       rethrow;
     }
@@ -220,12 +265,16 @@ class ApiClient {
         return true;
       } else if (response.data is Map) {
         final body = response.data as Map;
-        throw Exception(body['message'] ?? 'Server error ${response.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${response.statusCode}',
+        );
       }
     } on DioException catch (e) {
       if (e.response?.data is Map) {
         final body = Map<String, dynamic>.from(e.response!.data as Map);
-        throw Exception(body['message'] ?? 'Server error ${e.response?.statusCode}');
+        throw Exception(
+          body['message'] ?? 'Server error ${e.response?.statusCode}',
+        );
       }
       rethrow;
     }

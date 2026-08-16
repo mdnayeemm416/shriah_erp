@@ -59,6 +59,7 @@ class _StoreAdminScreenState extends State<StoreAdminScreen>
     _tabController.addListener(() {
       context.read<WholesaleCubit>().changeTab(_tabController.index);
     });
+    context.read<WholesaleCubit>().loadAllData();
   }
 
   @override

@@ -93,10 +93,10 @@ class ShopEntryModel extends HiveObject {
 
   factory ShopEntryModel.fromJson(Map<String, dynamic> json) {
     return ShopEntryModel(
-      id: json['id'] as String,
-      shopId: (json['shopId'] ?? json['shop_id']) as String,
+      id: json['id'] as String? ?? '',
+      shopId: (json['shopId'] ?? json['shop_id'] ?? '') as String,
       cashierId: (json['cashierId'] ?? json['cashier_id']) as String?,
-      entryType: (json['entryType'] ?? json['entry_type']) as String,
+      entryType: (json['entryType'] ?? json['entry_type'] ?? 'sale') as String,
       posSale: ((json['posSale'] ?? json['pos_sale']) as num? ?? 0.0).toDouble(),
       cashSale: ((json['cashSale'] ?? json['cash_sale']) as num? ?? 0.0).toDouble(),
       bankSale: ((json['bankSale'] ?? json['bank_sale']) as num? ?? 0.0).toDouble(),
@@ -108,12 +108,14 @@ class ShopEntryModel extends HiveObject {
       dueReceivable: ((json['dueReceivable'] ?? json['due_receivable']) as num? ?? 0.0).toDouble(),
       notes: json['notes'] as String?,
       attachmentUrl: (json['assetUrl'] ?? json['attachmentUrl'] ?? json['attachment_url']) as String?,
-      txnDate: DateTime.parse((json['txnDate'] ?? json['txn_date']) as String),
+      txnDate: json['txnDate'] != null || json['txn_date'] != null
+          ? DateTime.tryParse((json['txnDate'] ?? json['txn_date']) as String) ?? DateTime.now()
+          : DateTime.now(),
       isDeleted: (json['isDeleted'] ?? json['is_deleted']) as bool? ?? false,
       createdAt: json['createdAt'] != null 
-          ? DateTime.parse(json['createdAt'] as String) 
+          ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
           : (json['created_at'] != null 
-              ? DateTime.parse(json['created_at'] as String) 
+              ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
               : DateTime.now()),
       shopName: (json['shopName'] ?? json['shop_name']) as String?,
       cashierName: (json['cashierName'] ?? json['cashier_name']) as String?,

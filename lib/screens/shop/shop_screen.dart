@@ -1753,22 +1753,65 @@ class _ShopScreenState extends State<ShopScreen> with TickerProviderStateMixin {
                                               color: Color(0xFF94A3B8),
                                             ),
                                             onPressed: () async {
-                                              final repo = ShopRepository();
-                                              await repo.saveShop(
-                                                s.copyWith(isDeleted: true),
-                                              );
-                                              if (!mounted) return;
-                                              _triggerFilteredLoad();
-                                              Navigator.pop(context);
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Shop deleted.',
+                                              final navigator = Navigator.of(context);
+                                              final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+                                              final confirm = await showDialog<bool>(
+                                                context: context,
+                                                builder: (dialogContext) => AlertDialog(
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(20),
                                                   ),
+                                                  title: const Text(
+                                                    'Delete Shop?',
+                                                    style: TextStyle(fontWeight: FontWeight.w900),
+                                                  ),
+                                                  content: Text(
+                                                    'Are you sure you want to delete "${s.name}"? This action cannot be undone.',
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () => Navigator.pop(dialogContext, false),
+                                                      child: const Text('Cancel'),
+                                                    ),
+                                                    ElevatedButton(
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: AppColors.destructive,
+                                                        foregroundColor: Colors.white,
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(12),
+                                                        ),
+                                                      ),
+                                                      onPressed: () => Navigator.pop(dialogContext, true),
+                                                      child: const Text('Delete'),
+                                                    ),
+                                                  ],
                                                 ),
                                               );
+                                              if (confirm != true) return;
+
+                                              try {
+                                                final repo = ShopRepository();
+                                                await repo.deleteShop(s.id);
+                                                if (!mounted) return;
+                                                _triggerFilteredLoad();
+                                                navigator.pop();
+                                                scaffoldMessenger.showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'Shop deleted successfully.',
+                                                    ),
+                                                  ),
+                                                );
+                                              } catch (e) {
+                                                scaffoldMessenger.showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      'Failed to delete shop: $e',
+                                                    ),
+                                                  ),
+                                                );
+                                              }
                                             },
                                           ),
                                         ],

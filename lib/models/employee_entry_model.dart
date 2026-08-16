@@ -49,17 +49,19 @@ class EmployeeEntryModel extends HiveObject {
 
   factory EmployeeEntryModel.fromJson(Map<String, dynamic> json) {
     return EmployeeEntryModel(
-      id: json['id'] as String,
-      employeeId: json['employee_id'] as String,
-      entryType: json['entry_type'] as String,
+      id: json['id'] as String? ?? '',
+      employeeId: (json['employeeId'] ?? json['employee_id'] ?? '') as String,
+      entryType: (json['entryType'] ?? json['entry_type'] ?? 'give') as String,
       amount: (json['amount'] as num? ?? 0.0).toDouble(),
       kind: json['kind'] as String? ?? 'cash',
       notes: json['notes'] as String?,
-      attachmentUrl: json['attachment_url'] as String?,
-      txnDate: DateTime.parse(json['txn_date'] as String),
-      isDeleted: json['is_deleted'] as bool? ?? false,
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'] as String) 
+      attachmentUrl: (json['attachmentUrl'] ?? json['attachment_url']) as String?,
+      txnDate: json['txnDate'] != null || json['txn_date'] != null
+          ? DateTime.tryParse((json['txnDate'] ?? json['txn_date']) as String) ?? DateTime.now()
+          : DateTime.now(),
+      isDeleted: (json['isDeleted'] ?? json['is_deleted']) as bool? ?? false,
+      createdAt: json['createdAt'] != null || json['created_at'] != null
+          ? DateTime.tryParse((json['createdAt'] ?? json['created_at']) as String) ?? DateTime.now()
           : DateTime.now(),
     );
   }

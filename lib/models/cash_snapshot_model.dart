@@ -39,8 +39,10 @@ class CashInHandSnapshotModel extends HiveObject {
   factory CashInHandSnapshotModel.fromJson(Map<String, dynamic> json) {
     var holdersList = json['holders'] as List? ?? [];
     return CashInHandSnapshotModel(
-      id: json['id'] as String,
-      snapshotDate: DateTime.parse(json['snapshot_date'] as String),
+      id: json['id'] as String? ?? '',
+      snapshotDate: json['snapshot_date'] != null 
+          ? DateTime.tryParse(json['snapshot_date'] as String) ?? DateTime.now()
+          : DateTime.now(),
       cashInHand: (json['cash_in_hand'] as num? ?? 0.0).toDouble(),
       cashInApp: (json['cash_in_app'] as num? ?? 0.0).toDouble(),
       difference: (json['difference'] as num? ?? 0.0).toDouble(),
@@ -48,7 +50,7 @@ class CashInHandSnapshotModel extends HiveObject {
           .map((h) => CashHolderModel.fromJson(h as Map<String, dynamic>))
           .toList(),
       createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'] as String) 
+          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
           : DateTime.now(),
     );
   }

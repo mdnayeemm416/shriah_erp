@@ -29,7 +29,9 @@ class WholesaleSalesReturnRepository {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      rethrow;
+    }
     return list;
   }
 

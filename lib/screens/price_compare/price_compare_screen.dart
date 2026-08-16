@@ -33,6 +33,12 @@ class _PriceCompareScreenState extends State<PriceCompareScreen> {
   String _searchQuery = '';
 
   @override
+  void initState() {
+    super.initState();
+    context.read<PriceCompareCubit>().loadProducts();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _nameController.dispose();
