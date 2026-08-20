@@ -59,6 +59,9 @@ class ProductRepository {
         await _apiClient.putMap(
             ApiEndpoints.productById(product.id), payload);
       } else {
+        if (payload['id'] == null || (payload['id'] is String && (payload['id'] as String).isEmpty)) {
+          payload.remove('id');
+        }
         await _apiClient.postMap(ApiEndpoints.products, payload);
       }
     } catch (e) {

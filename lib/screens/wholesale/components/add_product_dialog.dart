@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../blocs/wholesale/wholesale_cubit.dart';
@@ -806,7 +805,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
       final description = descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim();
 
       final newProd = ProductModel(
-        id: widget.product?.id ?? const Uuid().v4(),
+        id: widget.product?.id ?? '',
         name: name,
         nameBn: bn,
         nameAr: ar,
