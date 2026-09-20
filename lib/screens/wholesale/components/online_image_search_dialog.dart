@@ -15,7 +15,8 @@ class OnlineImageSearchDialog extends StatefulWidget {
   });
 
   @override
-  State<OnlineImageSearchDialog> createState() => _OnlineImageSearchDialogState();
+  State<OnlineImageSearchDialog> createState() =>
+      _OnlineImageSearchDialogState();
 }
 
 class _OnlineImageSearchDialogState extends State<OnlineImageSearchDialog> {
@@ -62,7 +63,8 @@ class _OnlineImageSearchDialogState extends State<OnlineImageSearchDialog> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Failed to fetch online images. Please try again or paste a direct image URL.';
+          _errorMessage =
+              'Failed to fetch online images. Please try again or paste a direct image URL.';
         });
       }
     }
@@ -74,7 +76,10 @@ class _OnlineImageSearchDialogState extends State<OnlineImageSearchDialog> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Enter Custom Image URL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Enter Custom Image URL',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         content: TextField(
           controller: urlController,
           autofocus: true,
@@ -113,8 +118,12 @@ class _OnlineImageSearchDialogState extends State<OnlineImageSearchDialog> {
     final bgColor = isDark ? AppColors.cardDark : const Color(0xFFF8FAFC);
     final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
     final textColor = isDark ? Colors.white : const Color(0xFF1E293B);
-    final hintColor = isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
-    final borderColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+    final hintColor = isDark
+        ? const Color(0xFF64748B)
+        : const Color(0xFF94A3B8);
+    final borderColor = isDark
+        ? const Color(0xFF1F2937)
+        : const Color(0xFFE2E8F0);
     const primaryColor = Color(0xFF24B489);
 
     return Dialog(
@@ -130,14 +139,21 @@ class _OnlineImageSearchDialogState extends State<OnlineImageSearchDialog> {
               padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.sparkles, color: primaryColor, size: 22),
+                  const Icon(
+                    LucideIcons.sparkles,
+                    color: primaryColor,
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Text(
                       'Find Product Images Online',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   IconButton(
@@ -172,10 +188,18 @@ class _OnlineImageSearchDialogState extends State<OnlineImageSearchDialog> {
                         decoration: InputDecoration(
                           hintText: 'Search product images...',
                           hintStyle: TextStyle(color: hintColor, fontSize: 13),
-                          prefixIcon: Icon(LucideIcons.search, size: 18, color: hintColor),
+                          prefixIcon: Icon(
+                            LucideIcons.search,
+                            size: 18,
+                            color: hintColor,
+                          ),
                           suffixIcon: _searchController.text.isNotEmpty
                               ? IconButton(
-                                  icon: Icon(LucideIcons.x, size: 16, color: hintColor),
+                                  icon: Icon(
+                                    LucideIcons.x,
+                                    size: 16,
+                                    color: hintColor,
+                                  ),
                                   onPressed: () {
                                     _searchController.clear();
                                     setState(() {});
@@ -183,22 +207,31 @@ class _OnlineImageSearchDialogState extends State<OnlineImageSearchDialog> {
                                 )
                               : null,
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                          ),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton(
-                    onPressed: _isLoading ? null : () => _performSearch(_searchController.text),
+                    onPressed: _isLoading
+                        ? null
+                        : () => _performSearch(_searchController.text),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(0, 46),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                       elevation: 0,
                     ),
-                    child: const Text('Search', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'Search',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -221,165 +254,209 @@ class _OnlineImageSearchDialogState extends State<OnlineImageSearchDialog> {
                       ),
                     )
                   : _errorMessage != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24.0),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(LucideIcons.imageOff, size: 48, color: hintColor),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _errorMessage!,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: hintColor, fontSize: 14),
-                                ),
-                                const SizedBox(height: 16),
-                                OutlinedButton.icon(
-                                  onPressed: _showCustomUrlDialog,
-                                  icon: const Icon(LucideIcons.link, size: 16),
-                                  label: const Text('Paste Image URL Manually'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: primaryColor,
-                                    side: const BorderSide(color: primaryColor),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                ),
-                              ],
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              LucideIcons.imageOff,
+                              size: 48,
+                              color: hintColor,
                             ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: hintColor, fontSize: 14),
+                            ),
+                            const SizedBox(height: 16),
+                            OutlinedButton.icon(
+                              onPressed: _showCustomUrlDialog,
+                              icon: const Icon(LucideIcons.link, size: 16),
+                              label: const Text('Paste Image URL Manually'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: primaryColor,
+                                side: const BorderSide(color: primaryColor),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final crossAxisCount = constraints.maxWidth > 480
+                            ? 3
+                            : 2;
+                        return GridView.builder(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
                           ),
-                        )
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            final crossAxisCount = constraints.maxWidth > 480 ? 3 : 2;
-                            return GridView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: crossAxisCount,
                                 crossAxisSpacing: 12,
                                 mainAxisSpacing: 12,
                                 childAspectRatio: 0.85,
                               ),
-                              itemCount: _results.length,
-                              itemBuilder: (context, index) {
-                                final item = _results[index];
-                                final isSelected = _selectedUrls.contains(item.url);
+                          itemCount: _results.length,
+                          itemBuilder: (context, index) {
+                            final item = _results[index];
+                            final isSelected = _selectedUrls.contains(item.url);
 
-                                return GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      if (isSelected) {
-                                        _selectedUrls.remove(item.url);
-                                      } else {
-                                        if (_selectedUrls.length >= widget.maxAllowed) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Maximum ${widget.maxAllowed} images can be selected.'),
-                                            ),
-                                          );
-                                          return;
-                                        }
-                                        _selectedUrls.add(item.url);
-                                      }
-                                    });
-                                  },
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 150),
-                                    decoration: BoxDecoration(
-                                      color: cardBg,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: isSelected ? primaryColor : borderColor,
-                                        width: isSelected ? 2.5 : 1.0,
-                                      ),
-                                      boxShadow: isSelected
-                                          ? [
-                                              BoxShadow(
-                                                color: primaryColor.withValues(alpha: 0.2),
-                                                blurRadius: 8,
-                                                spreadRadius: 1,
-                                              )
-                                            ]
-                                          : null,
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(14),
-                                      child: Stack(
-                                        fit: StackFit.expand,
-                                        children: [
-                                          SmartImageWidget(
-                                            imageUrl: item.url,
-                                            fit: BoxFit.cover,
-                                            fallbackWidget: Container(
-                                              color: isDark ? Colors.grey[800] : Colors.grey[200],
-                                              child: Column(
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(LucideIcons.image, color: hintColor, size: 28),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    'Preview unavailable',
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(fontSize: 10, color: hintColor),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedUrls.remove(item.url);
+                                  } else {
+                                    if (_selectedUrls.length >=
+                                        widget.maxAllowed) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Maximum ${widget.maxAllowed} images can be selected.',
                                           ),
-                                          // Title/Source overlay at bottom
-                                          Positioned(
-                                            bottom: 0,
-                                            left: 0,
-                                            right: 0,
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              decoration: const BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  begin: Alignment.bottomCenter,
-                                                  end: Alignment.topCenter,
-                                                  colors: [Colors.black87, Colors.transparent],
-                                                ),
-                                              ),
-                                              child: Text(
-                                                item.source,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          // Checkmark Badge
-                                          Positioned(
-                                            top: 8,
-                                            right: 8,
-                                            child: Container(
-                                              width: 26,
-                                              height: 26,
-                                              decoration: BoxDecoration(
-                                                color: isSelected ? primaryColor : Colors.black38,
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: Colors.white, width: 1.5),
-                                              ),
-                                              child: Icon(
-                                                isSelected ? LucideIcons.check : LucideIcons.plus,
-                                                color: Colors.white,
-                                                size: 14,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    _selectedUrls.add(item.url);
+                                  }
+                                });
                               },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                decoration: BoxDecoration(
+                                  color: cardBg,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? primaryColor
+                                        : borderColor,
+                                    width: isSelected ? 2.5 : 1.0,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: primaryColor.withValues(
+                                              alpha: 0.2,
+                                            ),
+                                            blurRadius: 8,
+                                            spreadRadius: 1,
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      SmartImageWidget(
+                                        imageUrl: item.url,
+                                        fit: BoxFit.cover,
+                                        fallbackWidget: Container(
+                                          color: isDark
+                                              ? Colors.grey[800]
+                                              : Colors.grey[200],
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                LucideIcons.image,
+                                                color: hintColor,
+                                                size: 28,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Preview unavailable',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: hintColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      // Title/Source overlay at bottom
+                                      Positioned(
+                                        bottom: 0,
+                                        left: 0,
+                                        right: 0,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: const BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.bottomCenter,
+                                              end: Alignment.topCenter,
+                                              colors: [
+                                                Colors.black87,
+                                                Colors.transparent,
+                                              ],
+                                            ),
+                                          ),
+                                          child: Text(
+                                            item.source,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      // Checkmark Badge
+                                      Positioned(
+                                        top: 8,
+                                        right: 8,
+                                        child: Container(
+                                          width: 26,
+                                          height: 26,
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? primaryColor
+                                                : Colors.black38,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            isSelected
+                                                ? LucideIcons.check
+                                                : LucideIcons.plus,
+                                            color: Colors.white,
+                                            size: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             );
                           },
-                        ),
+                        );
+                      },
+                    ),
             ),
 
             const Divider(height: 1, thickness: 1),
@@ -412,8 +489,13 @@ class _OnlineImageSearchDialogState extends State<OnlineImageSearchDialog> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                     ),
                     child: Text(
                       _selectedUrls.isEmpty

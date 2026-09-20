@@ -574,10 +574,26 @@ class _WholesaleTransactionDialogState extends State<WholesaleTransactionDialog>
       if (!mounted) return;
       Navigator.pop(context);
 
+      String? partyVat;
+      double? oldBal;
+      double? newBal;
+      if (_customerId != null && _customerId!.isNotEmpty) {
+        final custMatches = cubit.state.customers.where((c) => c.id == _customerId);
+        if (custMatches.isNotEmpty) {
+          final cust = custMatches.first;
+          partyVat = cust.vatNumber;
+          newBal = cubit.state.getCustomerDue(cust.id);
+          oldBal = newBal - _dueAmount;
+        }
+      }
+
       if (printReceipt) {
         await PdfPrintService.print80mmReceipt(
           entry: savedEntry,
           partyName: _customerName.isEmpty ? 'Walk-in Customer' : _customerName,
+          partyVatNumber: partyVat,
+          oldBalance: oldBal,
+          newBalance: newBal,
         );
       } else if (shareReceipt) {
         await _handleSaveAndShare(savedEntry, targetMobile: mobileToUse);

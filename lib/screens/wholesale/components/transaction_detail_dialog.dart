@@ -689,9 +689,29 @@ class TransactionDetailDialog extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       ),
                       onPressed: () async {
-                        await PdfPrintService.print80mmReceipt(
+                        String? partyVat;
+                        double? oldBal;
+                        double? newBal;
+                        try {
+                          final cubit = context.read<WholesaleCubit>();
+                          if (entry is WholesaleSaleModel && entry.customerId != null) {
+                            final custMatches = cubit.state.customers.where((c) => c.id == entry.customerId);
+                            if (custMatches.isNotEmpty) {
+                              final cust = custMatches.first;
+                              partyVat = cust.vatNumber;
+                              newBal = cubit.state.getCustomerDue(cust.id);
+                              oldBal = newBal - entry.dueAmount;
+                            }
+                          }
+                        } catch (_) {}
+
+                        await PdfPrintService.preview80mmReceipt(
+                          context,
                           entry: entry,
                           partyName: partyName,
+                          partyVatNumber: partyVat,
+                          oldBalance: oldBal,
+                          newBalance: newBal,
                         );
                       },
                       icon: const Icon(LucideIcons.printer, size: 14, color: Colors.white),
