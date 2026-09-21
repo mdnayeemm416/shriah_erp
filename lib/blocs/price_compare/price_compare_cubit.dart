@@ -1,80 +1,81 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:uuid/uuid.dart';
 import '../../models/price_compare_models.dart';
 import '../../repositories/price_compare_repository.dart';
 
 class PriceCompareState {
   final bool loading;
+  final bool actionLoading;
+  final String? errorMessage;
+  final String? successMessage;
   final List<PriceCompareProductModel> products;
+  final List<PriceCompareVendorModel> vendors;
+  final List<PriceCompareEntryModel> entries;
   final PriceCompareProductModel? selectedProduct;
-  final List<PriceCompareRecordModel> records; // raw list matching product
-  final List<PriceCompareRecordModel> filteredRecords; // filtered list
-  final List<String> suppliers;
-  
-  // Computed price compare stats
-  final double lowestPrice;
-  final double highestPrice;
-  final double averagePrice;
-  final double latestPrice;
-  final double deltaPercentage; // Variation delta percentage
 
-  // Filters
-  final String filterPreset; // 'today' | 'week' | 'month' | 'custom' | 'all'
-  final DateTime? fromDate;
-  final DateTime? toDate;
-  final String? filterSupplier;
+  // Filter params
+  final String searchQuery;
+  final String? selectedVendor;
+  final String? startDate;
+  final String? endDate;
 
   PriceCompareState({
     this.loading = false,
-    required this.products,
+    this.actionLoading = false,
+    this.errorMessage,
+    this.successMessage,
+    this.products = const [],
+    this.vendors = const [],
+    this.entries = const [],
     this.selectedProduct,
-    required this.records,
-    required this.filteredRecords,
-    required this.suppliers,
-    this.lowestPrice = 0.0,
-    this.highestPrice = 0.0,
-    this.averagePrice = 0.0,
-    this.latestPrice = 0.0,
-    this.deltaPercentage = 0.0,
-    this.filterPreset = 'all',
-    this.fromDate,
-    this.toDate,
-    this.filterSupplier,
+    this.searchQuery = '',
+    this.selectedVendor,
+    this.startDate,
+    this.endDate,
   });
+
+  List<PriceCompareProductModel> get filteredProducts {
+    if (searchQuery.trim().isEmpty) return products;
+    final q = searchQuery.toLowerCase().trim();
+    return products.where((p) {
+      final nameMatches = p.productName.toLowerCase().contains(q);
+      final barcodeMatches = (p.barcode ?? '').toLowerCase().contains(q);
+      final categoryMatches = (p.category ?? '').toLowerCase().contains(q);
+      return nameMatches || barcodeMatches || categoryMatches;
+    }).toList();
+  }
 
   PriceCompareState copyWith({
     bool? loading,
+    bool? actionLoading,
+    String? errorMessage,
+    String? successMessage,
+    bool clearError = false,
+    bool clearSuccess = false,
     List<PriceCompareProductModel>? products,
+    List<PriceCompareVendorModel>? vendors,
+    List<PriceCompareEntryModel>? entries,
     PriceCompareProductModel? selectedProduct,
-    List<PriceCompareRecordModel>? records,
-    List<PriceCompareRecordModel>? filteredRecords,
-    List<String>? suppliers,
-    double? lowestPrice,
-    double? highestPrice,
-    double? averagePrice,
-    double? latestPrice,
-    double? deltaPercentage,
-    String? filterPreset,
-    DateTime? fromDate,
-    DateTime? toDate,
-    String? filterSupplier,
+    bool clearSelectedProduct = false,
+    String? searchQuery,
+    String? selectedVendor,
+    bool clearVendor = false,
+    String? startDate,
+    String? endDate,
+    bool clearDateRange = false,
   }) {
     return PriceCompareState(
       loading: loading ?? this.loading,
+      actionLoading: actionLoading ?? this.actionLoading,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      successMessage: clearSuccess ? null : (successMessage ?? this.successMessage),
       products: products ?? this.products,
-      selectedProduct: selectedProduct ?? this.selectedProduct,
-      records: records ?? this.records,
-      filteredRecords: filteredRecords ?? this.filteredRecords,
-      suppliers: suppliers ?? this.suppliers,
-      lowestPrice: lowestPrice ?? this.lowestPrice,
-      highestPrice: highestPrice ?? this.highestPrice,
-      averagePrice: averagePrice ?? this.averagePrice,
-      latestPrice: latestPrice ?? this.latestPrice,
-      deltaPercentage: deltaPercentage ?? this.deltaPercentage,
-      filterPreset: filterPreset ?? this.filterPreset,
-      fromDate: fromDate ?? this.fromDate,
-      toDate: toDate ?? this.toDate,
-      filterSupplier: filterSupplier ?? this.filterSupplier,
+      vendors: vendors ?? this.vendors,
+      entries: entries ?? this.entries,
+      selectedProduct: clearSelectedProduct ? null : (selectedProduct ?? this.selectedProduct),
+      searchQuery: searchQuery ?? this.searchQuery,
+      selectedVendor: clearVendor ? null : (selectedVendor ?? this.selectedVendor),
+      startDate: clearDateRange ? null : (startDate ?? this.startDate),
+      endDate: clearDateRange ? null : (endDate ?? this.endDate),
     );
   }
 }
@@ -85,203 +86,278 @@ class PriceCompareCubit extends Cubit<PriceCompareState> {
   PriceCompareCubit({
     required PriceCompareRepository compareRepo,
   })  : _compareRepo = compareRepo,
-        super(PriceCompareState(
-          products: [],
-          records: [],
-          filteredRecords: [],
-          suppliers: [],
-        ));
+        super(PriceCompareState());
 
-  Future<void> loadProducts() async {
-    emit(state.copyWith(loading: true));
+  /// Load all products with analysis from live API
+  Future<void> loadProducts({bool showLoading = true}) async {
+    if (showLoading) {
+      emit(state.copyWith(loading: true, clearError: true));
+    }
     try {
-      final list = await _compareRepo.getProducts();
-      final suppliers = await _compareRepo.listSuppliers();
+      final productsFuture = _compareRepo.getProducts(
+        search: state.searchQuery.isNotEmpty ? state.searchQuery : null,
+        vendor: state.selectedVendor,
+        startDate: state.startDate,
+        endDate: state.endDate,
+      );
+
+      final vendorsFuture = _compareRepo.getVendors().catchError((_) => <PriceCompareVendorModel>[]);
+
+      final results = await Future.wait([productsFuture, vendorsFuture]);
+      final products = results[0] as List<PriceCompareProductModel>;
+      final vendors = results[1] as List<PriceCompareVendorModel>;
+
       emit(state.copyWith(
         loading: false,
-        products: list,
-        suppliers: suppliers,
+        products: products,
+        vendors: vendors,
+        clearError: true,
       ));
-    } catch (_) {
-      emit(state.copyWith(loading: false));
-    }
-  }
-
-  Future<void> selectProduct(PriceCompareProductModel? product) async {
-    if (product == null) {
-      emit(state.copyWith(selectedProduct: null, records: [], filteredRecords: []));
-      return;
-    }
-    emit(state.copyWith(loading: true, selectedProduct: product));
-    try {
-      final records = await _compareRepo.getRecords(product.id);
-      emit(state.copyWith(loading: false, records: records));
-      _computeAndFilter();
-    } catch (_) {
-      emit(state.copyWith(loading: false));
-    }
-  }
-
-  Future<void> scanBarcode(String barcode) async {
-    emit(state.copyWith(loading: true));
-    try {
-      final matched = await _compareRepo.getProductByBarcode(barcode);
-      emit(state.copyWith(loading: false));
-      if (matched != null) {
-        selectProduct(matched);
-      }
-    } catch (_) {
-      emit(state.copyWith(loading: false));
-    }
-  }
-
-  void changeFilters({
-    String? preset,
-    DateTime? from,
-    DateTime? to,
-    String? supplier,
-  }) {
-    emit(state.copyWith(
-      filterPreset: preset ?? state.filterPreset,
-      fromDate: from ?? state.fromDate,
-      toDate: to ?? state.toDate,
-      filterSupplier: supplier == 'all' ? null : (supplier ?? state.filterSupplier),
-    ));
-    _computeAndFilter();
-  }
-
-  void _computeAndFilter() {
-    if (state.selectedProduct == null) return;
-    
-    final all = state.records;
-    
-    // Filter records
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    final filtered = all.where((r) {
-      if (state.filterSupplier != null && r.supplier != state.filterSupplier) {
-        return false;
-      }
-
-      if (state.filterPreset == 'all') return true;
-      if (state.filterPreset == 'custom') {
-        if (state.fromDate == null || state.toDate == null) return true;
-        final rStr = r.recordDate.toIso8601String().split('T')[0];
-        final fStr = state.fromDate!.toIso8601String().split('T')[0];
-        final tStr = state.toDate!.toIso8601String().split('T')[0];
-        return rStr.compareTo(fStr) >= 0 && rStr.compareTo(tStr) <= 0;
-      }
-
-      DateTime start = today;
-      if (state.filterPreset == 'today') {
-        start = today;
-      } else if (state.filterPreset == 'week') {
-        start = today.subtract(const Duration(days: 7));
-      } else if (state.filterPreset == 'month') {
-        start = DateTime(now.year, now.month, 1);
-      }
-
-      return r.recordDate.isAfter(start) || r.recordDate.isAtSameMomentAs(start);
-    }).toList();
-
-    // Compute stats
-    if (filtered.isEmpty) {
+    } catch (e) {
       emit(state.copyWith(
-        filteredRecords: filtered,
-        lowestPrice: 0.0,
-        highestPrice: 0.0,
-        averagePrice: 0.0,
-        latestPrice: 0.0,
-        deltaPercentage: 0.0,
+        loading: false,
+        errorMessage: _formatError(e),
       ));
-      return;
     }
+  }
 
-    double min = double.infinity;
-    double max = 0.0;
-    double sum = 0.0;
+  /// Search by product name, barcode, or category
+  void search(String query) {
+    emit(state.copyWith(searchQuery: query));
+    loadProducts(showLoading: false);
+  }
 
-    for (final r in filtered) {
-      final p = r.purchasePrice;
-      if (p < min) min = p;
-      if (p > max) max = p;
-      sum += p;
+  /// Filter products by vendor
+  void filterByVendor(String? vendor) {
+    if (vendor == null || vendor.isEmpty || vendor == 'All') {
+      emit(state.copyWith(clearVendor: true));
+    } else {
+      emit(state.copyWith(selectedVendor: vendor));
     }
+    loadProducts(showLoading: true);
+  }
 
-    final average = sum / filtered.length;
-    
-    // Latest price is the first one since it's sorted descending by recordDate
-    final latest = filtered.first.purchasePrice;
+  /// Filter products by date range
+  void filterByDateRange(String? start, String? end) {
+    if (start == null || end == null) {
+      emit(state.copyWith(clearDateRange: true));
+    } else {
+      emit(state.copyWith(startDate: start, endDate: end));
+    }
+    loadProducts(showLoading: true);
+  }
 
-    // Delta calculation: compare latest to the second latest if exists
-    double delta = 0.0;
-    if (filtered.length > 1) {
-      final secondLatest = filtered[1].purchasePrice;
-      if (secondLatest > 0) {
-        delta = ((latest - secondLatest) / secondLatest) * 100;
+  /// Fetch single product details with full history
+  Future<void> selectProduct(String productId) async {
+    emit(state.copyWith(loading: true, clearError: true));
+    try {
+      final product = await _compareRepo.getProductById(productId);
+      emit(state.copyWith(loading: false, selectedProduct: product));
+    } catch (e) {
+      emit(state.copyWith(loading: false, errorMessage: _formatError(e)));
+    }
+  }
+
+  void clearSelectedProduct() {
+    emit(state.copyWith(clearSelectedProduct: true));
+  }
+
+  /// GET /price-compare/entries: Flat list of purchase entries across products
+  Future<void> loadEntries({
+    String? vendor,
+    String? productId,
+    String? startDate,
+    String? endDate,
+    String? search,
+  }) async {
+    try {
+      final entries = await _compareRepo.getEntries(
+        vendor: vendor ?? state.selectedVendor,
+        productId: productId,
+        startDate: startDate ?? state.startDate,
+        endDate: endDate ?? state.endDate,
+        search: search ?? (state.searchQuery.isNotEmpty ? state.searchQuery : null),
+      );
+      emit(state.copyWith(entries: entries));
+    } catch (_) {}
+  }
+
+  /// POST /api/v1/price-compare: Create product (+ optional initial buy)
+  /// If extra entries are supplied (e.g., from multiple company inputs),
+  /// automatically creates them via POST /api/v1/price-compare/entries.
+  Future<bool> createProduct(
+    CreatePriceCompareProductParams params, {
+    List<CreatePriceCompareEntryParams>? additionalEntries,
+  }) async {
+    emit(state.copyWith(actionLoading: true, clearError: true, clearSuccess: true));
+    try {
+      final createdProduct = await _compareRepo.createProduct(params);
+
+      // If user added additional company entries, post each entry
+      if (additionalEntries != null && additionalEntries.isNotEmpty) {
+        for (final entry in additionalEntries) {
+          final updatedEntry = CreatePriceCompareEntryParams(
+            productId: createdProduct.id,
+            vendorName: entry.vendorName,
+            purchasePrice: entry.purchasePrice,
+            purchaseDate: entry.purchaseDate,
+            sellingPrice: entry.sellingPrice,
+            quantity: entry.quantity,
+            slipImagePath: entry.slipImagePath,
+            slipPdfPath: entry.slipPdfPath,
+            notes: entry.notes,
+          );
+          try {
+            await _compareRepo.addPurchaseEntry(updatedEntry);
+          } catch (_) {
+            // Continue saving remaining entries
+          }
+        }
       }
+
+      await loadProducts(showLoading: false);
+      emit(state.copyWith(
+        actionLoading: false,
+        successMessage: "Product '${createdProduct.productName}' saved successfully",
+      ));
+      return true;
+    } catch (e) {
+      emit(state.copyWith(
+        actionLoading: false,
+        errorMessage: _formatError(e),
+      ));
+      return false;
     }
-
-    emit(state.copyWith(
-      filteredRecords: filtered,
-      lowestPrice: min == double.infinity ? 0.0 : min,
-      highestPrice: max,
-      averagePrice: average,
-      latestPrice: latest,
-      deltaPercentage: delta,
-    ));
   }
 
-  Future<void> addProduct(String name, String? barcode, String? brand, double salePrice) async {
-    final product = PriceCompareProductModel(
-      id: const Uuid().v4(),
-      name: name,
-      barcode: barcode,
-      brand: brand,
-      salePrice: salePrice,
-    );
+  /// POST /api/v1/price-compare/entries: Record an additional vendor purchase
+  Future<bool> addPurchaseEntry(CreatePriceCompareEntryParams params) async {
+    emit(state.copyWith(actionLoading: true, clearError: true, clearSuccess: true));
+    try {
+      final entry = await _compareRepo.addPurchaseEntry(params);
+      await loadProducts(showLoading: false);
 
-    await _compareRepo.saveProduct(product);
-    await loadProducts();
-    await selectProduct(product);
+      if (state.selectedProduct?.id == params.productId) {
+        await selectProduct(params.productId);
+      }
+
+      emit(state.copyWith(
+        actionLoading: false,
+        successMessage: "Vendor purchase entry from '${entry.vendorName}' recorded successfully",
+      ));
+      return true;
+    } catch (e) {
+      emit(state.copyWith(
+        actionLoading: false,
+        errorMessage: _formatError(e),
+      ));
+      return false;
+    }
   }
 
-  Future<void> addRecord(String supplier, double purchasePrice, DateTime date, String? note) async {
-    if (state.selectedProduct == null) return;
-    
-    final record = PriceCompareRecordModel(
-      id: const Uuid().v4(),
-      productId: state.selectedProduct!.id,
-      supplier: supplier,
-      purchasePrice: purchasePrice,
-      recordDate: date,
-      note: note,
-    );
-
-    await _compareRepo.saveRecord(record);
-    
-    // Reload
-    final records = await _compareRepo.getRecords(state.selectedProduct!.id);
-    final suppliers = await _compareRepo.listSuppliers();
-    emit(state.copyWith(records: records, suppliers: suppliers));
-    _computeAndFilter();
+  /// PUT /api/v1/price-compare/:id: Update product details
+  Future<bool> updateProduct(String id, CreatePriceCompareProductParams params) async {
+    emit(state.copyWith(actionLoading: true, clearError: true, clearSuccess: true));
+    try {
+      final updated = await _compareRepo.updateProduct(id, params);
+      await loadProducts(showLoading: false);
+      if (state.selectedProduct?.id == id) {
+        await selectProduct(id);
+      }
+      emit(state.copyWith(
+        actionLoading: false,
+        successMessage: "Product '${updated.productName}' updated successfully",
+      ));
+      return true;
+    } catch (e) {
+      emit(state.copyWith(
+        actionLoading: false,
+        errorMessage: _formatError(e),
+      ));
+      return false;
+    }
   }
 
-  Future<void> deleteRecord(String id) async {
-    if (state.selectedProduct == null) return;
-    await _compareRepo.deleteRecord(id);
-    
-    // Reload
-    final records = await _compareRepo.getRecords(state.selectedProduct!.id);
-    emit(state.copyWith(records: records));
-    _computeAndFilter();
+  /// PUT /api/v1/price-compare/entries/:id: Update vendor purchase entry
+  Future<bool> updatePurchaseEntry(String entryId, CreatePriceCompareEntryParams params) async {
+    emit(state.copyWith(actionLoading: true, clearError: true, clearSuccess: true));
+    try {
+      final updated = await _compareRepo.updatePurchaseEntry(entryId, params);
+      await loadProducts(showLoading: false);
+      if (state.selectedProduct?.id == params.productId) {
+        await selectProduct(params.productId);
+      }
+      emit(state.copyWith(
+        actionLoading: false,
+        successMessage: "Vendor quote from '${updated.vendorName}' updated successfully",
+      ));
+      return true;
+    } catch (e) {
+      emit(state.copyWith(
+        actionLoading: false,
+        errorMessage: _formatError(e),
+      ));
+      return false;
+    }
   }
 
-  Future<void> deleteProduct() async {
-    if (state.selectedProduct == null) return;
-    await _compareRepo.deleteProduct(state.selectedProduct!.id);
-    emit(state.copyWith(selectedProduct: null, records: [], filteredRecords: []));
-    await loadProducts();
+  /// DELETE /api/v1/price-compare/:id
+  Future<bool> deleteProduct(String id) async {
+    emit(state.copyWith(actionLoading: true, clearError: true, clearSuccess: true));
+    try {
+      await _compareRepo.deleteProduct(id);
+      await loadProducts(showLoading: false);
+      if (state.selectedProduct?.id == id) {
+        emit(state.copyWith(clearSelectedProduct: true));
+      }
+      emit(state.copyWith(
+        actionLoading: false,
+        successMessage: 'Comparison product deleted successfully',
+      ));
+      return true;
+    } catch (e) {
+      emit(state.copyWith(
+        actionLoading: false,
+        errorMessage: _formatError(e),
+      ));
+      return false;
+    }
+  }
+
+  /// DELETE /api/v1/price-compare/entries/:id
+  Future<bool> deletePurchaseEntry(String entryId, {String? productId}) async {
+    emit(state.copyWith(actionLoading: true, clearError: true, clearSuccess: true));
+    try {
+      await _compareRepo.deletePurchaseEntry(entryId);
+      await loadProducts(showLoading: false);
+      if (productId != null && state.selectedProduct?.id == productId) {
+        await selectProduct(productId);
+      }
+      emit(state.copyWith(
+        actionLoading: false,
+        successMessage: 'Vendor purchase entry deleted successfully',
+      ));
+      return true;
+    } catch (e) {
+      emit(state.copyWith(
+        actionLoading: false,
+        errorMessage: _formatError(e),
+      ));
+      return false;
+    }
+  }
+
+  /// Clear messages
+  void clearMessages() {
+    emit(state.copyWith(clearError: true, clearSuccess: true));
+  }
+
+  String _formatError(dynamic e) {
+    if (e == null) return 'An unexpected error occurred';
+    final str = e.toString();
+    if (str.startsWith('Exception: ')) {
+      return str.replaceFirst('Exception: ', '');
+    }
+    return str;
   }
 }

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import '../../blocs/price_compare/price_compare_cubit.dart';
+import '../../core/theme/app_colors.dart';
+import '../../models/price_compare_models.dart';
 import 'components/add_product_bottom_sheet.dart';
 import 'components/price_compare_empty_state.dart';
 import 'components/price_compare_header.dart';
 import 'components/price_compare_product_card.dart';
-import 'models/price_compare_models.dart';
+import 'price_compare_details_screen.dart';
+import 'services/price_compare_export_service.dart';
 
 class PriceCompareScreen extends StatefulWidget {
   const PriceCompareScreen({super.key});
@@ -15,8 +20,14 @@ class PriceCompareScreen extends StatefulWidget {
 
 class _PriceCompareScreenState extends State<PriceCompareScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final List<PriceCompareProduct> _products = [];
-  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<PriceCompareCubit>().loadProducts();
+    });
+  }
 
   @override
   void dispose() {
@@ -25,20 +36,7 @@ class _PriceCompareScreenState extends State<PriceCompareScreen> {
   }
 
   void _openAddProduct() {
-    AddProductBottomSheet.show(
-      context,
-      onSave: (newProduct) {
-        setState(() {
-          _products.add(newProduct);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Product "${newProduct.name}" added successfully!'),
-            backgroundColor: const Color(0xFF23B386),
-          ),
-        );
-      },
-    );
+    AddProductBottomSheet.show(context);
   }
 
   void _scanBarcode() {
@@ -50,188 +48,268 @@ class _PriceCompareScreenState extends State<PriceCompareScreen> {
     );
   }
 
-  List<PriceCompareProduct> get _filteredProducts {
-    if (_searchQuery.isEmpty) return _products;
-    final query = _searchQuery.toLowerCase();
-    return _products.where((p) {
-      return p.name.toLowerCase().contains(query) || p.barcode.toLowerCase().contains(query);
-    }).toList();
+  Future<void> _handleMenuAction(String action, List<PriceCompareProductModel> products) async {
+    switch (action) {
+      case 'export_pdf':
+        await PriceCompareExportService.exportPdf(context, products);
+        break;
+      case 'export_excel':
+        await PriceCompareExportService.exportExcel(context, products);
+        break;
+      case 'print':
+        await PriceCompareExportService.printReport(context, products);
+        break;
+      case 'share_whatsapp':
+        await PriceCompareExportService.shareOnWhatsApp(context, products);
+        break;
+      case 'refresh':
+        await context.read<PriceCompareCubit>().loadProducts();
+        break;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredProducts;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text(
-          'Price Compare',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF0F172A),
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: false,
-        actions: [
-          IconButton(
-            onPressed: _scanBarcode,
-            icon: const Icon(LucideIcons.scan, size: 20, color: Color(0xFF1E293B)),
-            splashRadius: 22,
-          ),
-          IconButton(
-            onPressed: () {
-              // Quick action to add sample product or clear
-              showModalBottomSheet(
-                context: context,
-                backgroundColor: Colors.white,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                builder: (ctx) => SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+    return BlocConsumer<PriceCompareCubit, PriceCompareState>(
+      listener: (context, state) {
+        if (state.errorMessage != null && state.errorMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: const Color(0xFFEF4444),
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: () {
+                  context.read<PriceCompareCubit>().loadProducts();
+                },
+              ),
+            ),
+          );
+        } else if (state.successMessage != null && state.successMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.successMessage!),
+              backgroundColor: const Color(0xFF23B386),
+            ),
+          );
+          context.read<PriceCompareCubit>().clearMessages();
+        }
+      },
+      builder: (context, state) {
+        final filtered = state.filteredProducts;
+
+        return Scaffold(
+          backgroundColor: isDark ? AppColors.bgDark : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: Text(
+              'Price Compare',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isDark ? AppColors.fgDark : const Color(0xFF0F172A),
+              ),
+            ),
+            backgroundColor: isDark ? AppColors.cardDark : Colors.white,
+            elevation: 0,
+            centerTitle: false,
+            actions: [
+              IconButton(
+                onPressed: _scanBarcode,
+                icon: Icon(LucideIcons.scan, size: 20, color: isDark ? AppColors.fgDark : const Color(0xFF1E293B)),
+                splashRadius: 22,
+                tooltip: 'Scan Barcode',
+              ),
+              PopupMenuButton<String>(
+                icon: Icon(LucideIcons.moreVertical, size: 20, color: isDark ? AppColors.fgDark : const Color(0xFF1E293B)),
+                splashRadius: 22,
+                color: isDark ? AppColors.popoverDark : Colors.white,
+                onSelected: (val) => _handleMenuAction(val, filtered),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                itemBuilder: (ctx) => [
+                  PopupMenuItem(
+                    value: 'export_pdf',
+                    child: Row(
                       children: [
-                        ListTile(
-                          leading: const Icon(LucideIcons.plusCircle, color: Color(0xFF23B386)),
-                          title: const Text('Load Demo Compared Product'),
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            setState(() {
-                              _products.add(
-                                PriceCompareProduct(
-                                  id: 'demo_${DateTime.now().millisecondsSinceEpoch}',
-                                  name: '15No Shopping Kees Rabea 2Kg',
-                                  barcode: '6281001234567',
-                                  salePrice: 22.00,
-                                  purchases: [
-                                    CompanyPurchaseItem(
-                                      id: 'comp_1',
-                                      companyName: 'Al-Rabea Wholesale Co.',
-                                      purchasePrice: 17.50,
-                                      memoDate: DateTime.now().subtract(const Duration(days: 3)),
-                                    ),
-                                    CompanyPurchaseItem(
-                                      id: 'comp_2',
-                                      companyName: 'Azzouz Trading Est.',
-                                      purchasePrice: 18.00,
-                                      memoDate: DateTime.now().subtract(const Duration(days: 1)),
-                                    ),
-                                    CompanyPurchaseItem(
-                                      id: 'comp_3',
-                                      companyName: 'Makkah Modern Supply',
-                                      purchasePrice: 19.20,
-                                      memoDate: DateTime.now().subtract(const Duration(days: 7)),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            });
-                          },
-                        ),
-                        if (_products.isNotEmpty)
-                          ListTile(
-                            leading: const Icon(LucideIcons.trash2, color: Colors.red),
-                            title: const Text('Clear All Products'),
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              setState(() {
-                                _products.clear();
-                              });
-                            },
-                          ),
+                        Icon(LucideIcons.fileText, size: 17, color: isDark ? AppColors.fgDark : const Color(0xFF334155)),
+                        const SizedBox(width: 12),
+                        Text('Export PDF', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: isDark ? AppColors.fgDark : const Color(0xFF0F172A))),
                       ],
                     ),
                   ),
-                ),
-              );
-            },
-            icon: const Icon(LucideIcons.moreVertical, size: 20, color: Color(0xFF1E293B)),
-            splashRadius: 22,
-          ),
-          const SizedBox(width: 6),
-        ],
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: Color(0xFFE2E8F0)),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Hero Card (PRICE COMPARE)
-            PriceCompareHeader(
-              searchController: _searchController,
-              onSearchChanged: (val) {
-                setState(() {
-                  _searchQuery = val.trim();
-                });
-              },
-              onScanBarcode: _scanBarcode,
-              onAddProduct: _openAddProduct,
-            ),
-            const SizedBox(height: 24),
-
-            // "All Products" Section Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'All Products',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                  PopupMenuItem(
+                    value: 'export_excel',
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.sheet, size: 17, color: isDark ? AppColors.fgDark : const Color(0xFF334155)),
+                        const SizedBox(width: 12),
+                        Text('Export Excel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: isDark ? AppColors.fgDark : const Color(0xFF0F172A))),
+                      ],
+                    ),
                   ),
-                ),
-                Text(
-                  '${filtered.length} ${filtered.length == 1 ? "item" : "items"}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w500,
+                  PopupMenuItem(
+                    value: 'print',
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.printer, size: 17, color: isDark ? AppColors.fgDark : const Color(0xFF334155)),
+                        const SizedBox(width: 12),
+                        Text('Print', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: isDark ? AppColors.fgDark : const Color(0xFF0F172A))),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Empty State or Products List
-            if (filtered.isEmpty)
-              PriceCompareEmptyState(
-                onAddProduct: _openAddProduct,
-              )
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: filtered.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final product = filtered[index];
-                  return PriceCompareProductCard(
-                    product: product,
-                    onEdit: () {},
-                    onDelete: () {
-                      setState(() {
-                        _products.removeWhere((p) => p.id == product.id);
-                      });
-                    },
-                  );
-                },
+                  PopupMenuItem(
+                    value: 'share_whatsapp',
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.share2, size: 17, color: Color(0xFF25D366)),
+                        const SizedBox(width: 12),
+                        Text('Share on WhatsApp', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: isDark ? AppColors.fgDark : const Color(0xFF0F172A))),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'refresh',
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.refreshCw, size: 17, color: isDark ? AppColors.fgDark : const Color(0xFF334155)),
+                        const SizedBox(width: 12),
+                        Text('Refresh', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: isDark ? AppColors.fgDark : const Color(0xFF0F172A))),
+                      ],
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(width: 4),
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0)),
+            ),
+          ),
+          body: RefreshIndicator(
+            color: const Color(0xFF23B386),
+            onRefresh: () => context.read<PriceCompareCubit>().loadProducts(),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top Hero Card (Matches Screenshot 1)
+                  PriceCompareHeader(
+                    searchController: _searchController,
+                    onSearchChanged: (val) {
+                      context.read<PriceCompareCubit>().search(val);
+                    },
+                    onScanBarcode: _scanBarcode,
+                    onAddProduct: _openAddProduct,
+                  ),
+                  const SizedBox(height: 20),
 
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
+                  // Error Display Banner (if any)
+                  if (state.errorMessage != null && state.errorMessage!.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(LucideIcons.alertCircle, color: Color(0xFFEF4444), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              state.errorMessage!,
+                              style: const TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => context.read<PriceCompareCubit>().loadProducts(),
+                            child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // "All Products" Section Header (Matches Screenshot 1)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'All Products',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? AppColors.fgDark : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      if (state.loading)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF23B386)),
+                        )
+                      else
+                        Text(
+                          '${filtered.length} ${filtered.length == 1 ? "item" : "items"}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? AppColors.mutedFgDark : const Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Content List or Empty State
+                  if (state.loading && state.products.isEmpty)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48),
+                        child: CircularProgressIndicator(color: Color(0xFF23B386)),
+                      ),
+                    )
+                  else if (filtered.isEmpty)
+                    PriceCompareEmptyState(
+                      onAddProduct: _openAddProduct,
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final product = filtered[index];
+                        return PriceCompareProductCard(
+                          product: product,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PriceCompareDetailsScreen(productId: product.id),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

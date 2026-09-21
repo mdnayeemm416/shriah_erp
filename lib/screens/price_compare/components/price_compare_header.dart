@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import '../../../core/theme/app_colors.dart';
 
 class PriceCompareHeader extends StatelessWidget {
   final TextEditingController searchController;
@@ -17,14 +18,19 @@ class PriceCompareHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.cardDark : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE8ECEF), width: 1),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : const Color(0xFFE8ECEF),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -40,16 +46,16 @@ class PriceCompareHeader extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.8,
-              color: Colors.grey.shade600,
+              color: isDark ? AppColors.mutedFgDark : Colors.grey.shade600,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Find & compare product prices',
             style: TextStyle(
               fontSize: 19,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF0F172A),
+              color: isDark ? AppColors.fgDark : const Color(0xFF0F172A),
               letterSpacing: -0.3,
             ),
           ),
@@ -59,26 +65,32 @@ class PriceCompareHeader extends StatelessWidget {
           Container(
             height: 48,
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: isDark ? AppColors.inputDark : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(
+                color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+              ),
             ),
             child: TextField(
               controller: searchController,
               onChanged: onSearchChanged,
-              decoration: const InputDecoration(
+              style: TextStyle(
+                color: isDark ? AppColors.fgDark : const Color(0xFF0F172A),
+                fontSize: 14,
+              ),
+              decoration: InputDecoration(
                 hintText: 'Search by name or barcode...',
                 hintStyle: TextStyle(
-                  color: Color(0xFF94A3B8),
+                  color: isDark ? AppColors.mutedFgDark : const Color(0xFF94A3B8),
                   fontSize: 14,
                 ),
                 prefixIcon: Icon(
                   LucideIcons.search,
                   size: 18,
-                  color: Color(0xFF64748B),
+                  color: isDark ? AppColors.mutedFgDark : const Color(0xFF64748B),
                 ),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
             ),
           ),
@@ -93,22 +105,28 @@ class PriceCompareHeader extends StatelessWidget {
                   height: 44,
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF0F172A),
-                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                      backgroundColor: isDark ? AppColors.cardDark : Colors.white,
+                      foregroundColor: isDark ? AppColors.fgDark : const Color(0xFF0F172A),
+                      side: BorderSide(
+                        color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(22),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                     ),
                     onPressed: onScanBarcode,
-                    icon: const Icon(LucideIcons.scan, size: 16, color: Color(0xFF334155)),
-                    label: const Text(
+                    icon: Icon(
+                      LucideIcons.scan,
+                      size: 16,
+                      color: isDark ? AppColors.fgDark : const Color(0xFF334155),
+                    ),
+                    label: Text(
                       'Scan Barcode',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E293B),
+                        color: isDark ? AppColors.fgDark : const Color(0xFF1E293B),
                       ),
                     ),
                   ),

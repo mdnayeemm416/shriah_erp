@@ -8,56 +8,100 @@ import '../../../blocs/price_compare/price_compare_cubit.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../models/price_compare_models.dart';
 import '../../wholesale/components/online_image_search_dialog.dart';
-import '../models/price_compare_models.dart' as ui;
 import 'product_info_section.dart';
 import 'purchase_info_section.dart';
 
-class AddProductBottomSheet extends StatefulWidget {
-  final Function(ui.PriceCompareProduct)? onSave;
+class EditProductBottomSheet extends StatefulWidget {
+  final PriceCompareProductModel product;
 
-  const AddProductBottomSheet({super.key, this.onSave});
+  const EditProductBottomSheet({
+    super.key,
+    required this.product,
+  });
 
-  static Future<void> show(
+  static Future<bool?> show(
     BuildContext context, {
-    Function(ui.PriceCompareProduct)? onSave,
+    required PriceCompareProductModel product,
   }) {
-    return showModalBottomSheet(
+    return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => AddProductBottomSheet(onSave: onSave),
+      builder: (ctx) => EditProductBottomSheet(product: product),
     );
   }
 
   @override
-  State<AddProductBottomSheet> createState() => _AddProductBottomSheetState();
+  State<EditProductBottomSheet> createState() => _EditProductBottomSheetState();
 }
 
-class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _barcodeController = TextEditingController();
-  final TextEditingController _salePriceController = TextEditingController();
-  final TextEditingController _categoryController = TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
+class _EditProductBottomSheetState extends State<EditProductBottomSheet> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _barcodeController;
+  late final TextEditingController _salePriceController;
+  late final TextEditingController _categoryController;
+  late final TextEditingController _notesController;
   final ImagePicker _picker = ImagePicker();
 
   String? _selectedImagePath;
   String? _selectedPdfPath;
   final List<CompanyPurchaseEntry> _purchases = [];
+  final List<String> _existingEntryIds = [];
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    // Default with 1 company purchase entry
-    _purchases.add(
-      CompanyPurchaseEntry(
-        companyController: TextEditingController(),
-        priceController: TextEditingController(),
-        date: DateTime.now(),
-        isExpanded: true,
-      ),
+    _nameController = TextEditingController(text: widget.product.productName);
+    _barcodeController = TextEditingController(text: widget.product.barcode ?? '');
+    _categoryController = TextEditingController(text: widget.product.category ?? '');
+    _notesController = TextEditingController(text: widget.product.notes ?? '');
+    _salePriceController = TextEditingController(
+      text: widget.product.sellingPrice > 0
+          ? (widget.product.sellingPrice % 1 == 0
+              ? widget.product.sellingPrice.toInt().toString()
+              : widget.product.sellingPrice.toStringAsFixed(2))
+          : '',
     );
+    _selectedImagePath = widget.product.productImageUrl;
+    _selectedPdfPath = widget.product.productPdfUrl;
+
+    // Pre-populate with existing company purchases
+    if (widget.product.history.isNotEmpty) {
+      for (final h in widget.product.history) {
+        _existingEntryIds.add(h.id);
+        _purchases.add(
+          CompanyPurchaseEntry(
+            companyController: TextEditingController(text: h.vendorName),
+            priceController: TextEditingController(
+              text: h.purchasePrice % 1 == 0
+                  ? h.purchasePrice.toInt().toString()
+                  : h.purchasePrice.toStringAsFixed(2),
+            ),
+            quantityController: TextEditingController(
+              text: h.quantity != null && h.quantity! > 0 ? h.quantity!.toString() : '',
+            ),
+            notesController: TextEditingController(text: h.notes ?? ''),
+            date: h.purchaseDate != null
+                ? (DateTime.tryParse(h.purchaseDate!) ?? DateTime.now())
+                : DateTime.now(),
+            attachmentName: (h.slipImageUrl ?? h.slipPdfUrl)?.split('/').last,
+            slipImagePath: h.slipImageUrl,
+            slipPdfPath: h.slipPdfUrl,
+            isExpanded: false,
+          ),
+        );
+      }
+    } else {
+      _purchases.add(
+        CompanyPurchaseEntry(
+          companyController: TextEditingController(),
+          priceController: TextEditingController(),
+          date: DateTime.now(),
+          isExpanded: false,
+        ),
+      );
+    }
   }
 
   @override
@@ -74,6 +118,32 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
       p.notesController.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _handlePickPdf() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedPdfPath = result.files.first.path;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to pick PDF: $e')),
+        );
+      }
+    }
+  }
+
+  void _handleRemovePdf() {
+    setState(() {
+      _selectedPdfPath = null;
+    });
   }
 
   void _addAnotherCompany() {
@@ -100,6 +170,9 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
       removed.priceController.dispose();
       removed.quantityController.dispose();
       removed.notesController.dispose();
+      if (index < _existingEntryIds.length) {
+        _existingEntryIds.removeAt(index);
+      }
     });
   }
 
@@ -119,6 +192,18 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
       initialDate: _purchases[index].date,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF23B386),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       setState(() {
@@ -155,10 +240,7 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
               ),
               Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0)),
               ListTile(
-                leading: const Icon(
-                  LucideIcons.camera,
-                  color: Color(0xFF23B386),
-                ),
+                leading: const Icon(LucideIcons.camera, color: Color(0xFF23B386)),
                 title: Text(
                   'Take Photo of Slip',
                   style: TextStyle(color: isDark ? AppColors.fgDark : const Color(0xFF0F172A)),
@@ -166,10 +248,7 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
                 onTap: () async {
                   Navigator.pop(ctx);
                   try {
-                    final picked = await _picker.pickImage(
-                      source: ImageSource.camera,
-                      imageQuality: 85,
-                    );
+                    final picked = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
                     if (picked != null) {
                       setState(() {
                         _purchases[index].slipImagePath = picked.path;
@@ -179,18 +258,13 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
                     }
                   } catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to take photo: $e')),
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                     }
                   }
                 },
               ),
               ListTile(
-                leading: const Icon(
-                  LucideIcons.image,
-                  color: Color(0xFF3B82F6),
-                ),
+                leading: const Icon(LucideIcons.image, color: Color(0xFF3B82F6)),
                 title: Text(
                   'Choose Slip from Gallery',
                   style: TextStyle(color: isDark ? AppColors.fgDark : const Color(0xFF0F172A)),
@@ -198,10 +272,7 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
                 onTap: () async {
                   Navigator.pop(ctx);
                   try {
-                    final picked = await _picker.pickImage(
-                      source: ImageSource.gallery,
-                      imageQuality: 85,
-                    );
+                    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
                     if (picked != null) {
                       setState(() {
                         _purchases[index].slipImagePath = picked.path;
@@ -211,18 +282,13 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
                     }
                   } catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to pick image: $e')),
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                     }
                   }
                 },
               ),
               ListTile(
-                leading: const Icon(
-                  LucideIcons.fileText,
-                  color: Color(0xFFEF4444),
-                ),
+                leading: const Icon(LucideIcons.fileText, color: Color(0xFFEF4444)),
                 title: Text(
                   'Upload PDF Invoice / Slip',
                   style: TextStyle(color: isDark ? AppColors.fgDark : const Color(0xFF0F172A)),
@@ -240,16 +306,13 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
                         setState(() {
                           _purchases[index].slipPdfPath = path;
                           _purchases[index].slipImagePath = null;
-                          _purchases[index].attachmentName =
-                              result.files.first.name;
+                          _purchases[index].attachmentName = result.files.first.name;
                         });
                       }
                     }
                   } catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to pick PDF: $e')),
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                     }
                   }
                 },
@@ -279,83 +342,23 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
 
   Future<void> _handleFindOnline() async {
     final query = _nameController.text.trim();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    if (query.isEmpty) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: isDark ? AppColors.cardDark : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              const Icon(LucideIcons.info, color: Color(0xFF23B386), size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Product Name Required',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? AppColors.fgDark : const Color(0xFF0F172A),
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Please write the product name first before searching for images online.',
-            style: TextStyle(
-              fontSize: 14,
-              color: isDark ? AppColors.mutedFgDark : const Color(0xFF475569),
-            ),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF23B386),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
+    if (query.isEmpty) return;
 
     final List<String>? selectedUrls = await showDialog<List<String>>(
       context: context,
-      builder: (ctx) =>
-          OnlineImageSearchDialog(initialQuery: query, maxAllowed: 1),
+      builder: (ctx) => OnlineImageSearchDialog(initialQuery: query, maxAllowed: 1),
     );
 
     if (selectedUrls != null && selectedUrls.isNotEmpty) {
       setState(() {
         _selectedImagePath = selectedUrls.first;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Product image selected from online!'),
-            backgroundColor: Color(0xFF23B386),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
     }
   }
 
   Future<void> _handleCamera() async {
     try {
-      final picked = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-      );
+      final picked = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
       if (picked != null) {
         setState(() {
           _selectedImagePath = picked.path;
@@ -363,19 +366,14 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error taking picture: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
 
   Future<void> _handleGallery() async {
     try {
-      final picked = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
+      final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
       if (picked != null) {
         setState(() {
           _selectedImagePath = picked.path;
@@ -383,9 +381,7 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error selecting image: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -396,40 +392,11 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
     });
   }
 
-  Future<void> _handlePickPdf() async {
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-      );
-      if (result != null && result.files.isNotEmpty) {
-        setState(() {
-          _selectedPdfPath = result.files.first.path;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to pick PDF: $e')),
-        );
-      }
-    }
-  }
-
-  void _handleRemovePdf() {
-    setState(() {
-      _selectedPdfPath = null;
-    });
-  }
-
   Future<void> _handleSave() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a product name'),
-          backgroundColor: Color(0xFFEF4444),
-        ),
+        const SnackBar(content: Text('Please enter a product name'), backgroundColor: Color(0xFFEF4444)),
       );
       return;
     }
@@ -441,121 +408,110 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
     });
 
     try {
-      // First company purchase entry (if entered)
-      String? firstVendor;
-      double? firstPurchasePrice;
-      String? firstPurchaseDate;
-      double? firstQty;
-      String? firstSlipImage;
-      String? firstSlipPdf;
-      String? firstNotes;
+      // Check asset removal vs replacement for product
+      final hadProductImage = widget.product.productImageUrl != null && widget.product.productImageUrl!.trim().isNotEmpty;
+      final hasProductImage = _selectedImagePath != null && _selectedImagePath!.trim().isNotEmpty;
+      final removeProductImage = hadProductImage && !hasProductImage;
 
-      final extraEntries = <CreatePriceCompareEntryParams>[];
-
-      for (int i = 0; i < _purchases.length; i++) {
-        final p = _purchases[i];
-        final compName = p.companyController.text.trim();
-        final pPrice = double.tryParse(p.priceController.text.trim()) ?? 0.0;
-        final qty = double.tryParse(p.quantityController.text.trim());
-        final notes = p.notesController.text.trim();
-        final dateStr = DateFormat('yyyy-MM-dd').format(p.date);
-
-        if (compName.isNotEmpty || pPrice > 0) {
-          if (i == 0) {
-            firstVendor = compName.isNotEmpty ? compName : 'Vendor #1';
-            firstPurchasePrice = pPrice;
-            firstPurchaseDate = dateStr;
-            firstQty = qty;
-            firstSlipImage = p.slipImagePath;
-            firstSlipPdf = p.slipPdfPath;
-            firstNotes = notes.isNotEmpty ? notes : null;
-          } else {
-            extraEntries.add(
-              CreatePriceCompareEntryParams(
-                productId: '', // will be populated after product creation
-                vendorName: compName.isNotEmpty ? compName : 'Vendor #${i + 1}',
-                purchasePrice: pPrice,
-                purchaseDate: dateStr,
-                sellingPrice: salePrice > 0 ? salePrice : null,
-                quantity: qty,
-                slipImagePath: p.slipImagePath,
-                slipPdfPath: p.slipPdfPath,
-                notes: notes.isNotEmpty ? notes : null,
-              ),
-            );
-          }
-        }
-      }
-
-      final productNotes = _notesController.text.trim().isNotEmpty
-          ? _notesController.text.trim()
-          : firstNotes;
+      final hadProductPdf = widget.product.productPdfUrl != null && widget.product.productPdfUrl!.trim().isNotEmpty;
+      final hasProductPdf = _selectedPdfPath != null && _selectedPdfPath!.trim().isNotEmpty;
+      final removeProductPdf = hadProductPdf && !hasProductPdf;
 
       final productParams = CreatePriceCompareProductParams(
+        id: widget.product.id,
         productName: name,
         sellingPrice: salePrice,
-        productImagePath: _selectedImagePath,
-        productPdfPath: _selectedPdfPath,
         barcode: _barcodeController.text.trim().isNotEmpty
             ? _barcodeController.text.trim()
-            : null,
+            : widget.product.barcode,
         category: _categoryController.text.trim().isNotEmpty
             ? _categoryController.text.trim()
-            : null,
-        vendorName: firstVendor,
-        purchasePrice: firstPurchasePrice,
-        purchaseDate: firstPurchaseDate,
-        quantity: firstQty,
-        slipImagePath: firstSlipImage,
-        slipPdfPath: firstSlipPdf,
-        notes: productNotes,
+            : widget.product.category,
+        erpProductId: widget.product.erpProductId,
+        notes: _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : widget.product.notes,
+        productImagePath: hasProductImage ? _selectedImagePath : null,
+        productPdfPath: hasProductPdf ? _selectedPdfPath : null,
+        removeProductImage: removeProductImage ? true : null,
+        removeProductPdf: removeProductPdf ? true : null,
       );
 
-      final success = await context.read<PriceCompareCubit>().createProduct(
+      final success = await context.read<PriceCompareCubit>().updateProduct(
+        widget.product.id,
         productParams,
-        additionalEntries: extraEntries,
       );
 
       if (!mounted) return;
 
       if (success) {
-        // Also fire legacy callback if attached
-        if (widget.onSave != null) {
-          final dummyUiProduct = ui.PriceCompareProduct(
-            id: 'saved_${DateTime.now().millisecondsSinceEpoch}',
-            name: name,
-            barcode: _barcodeController.text.trim(),
-            salePrice: salePrice,
-            imagePath: _selectedImagePath,
-          );
-          widget.onSave!(dummyUiProduct);
+        // Save/Update company quotes entered
+        for (int i = 0; i < _purchases.length; i++) {
+          final p = _purchases[i];
+          final compName = p.companyController.text.trim();
+          final pPrice = double.tryParse(p.priceController.text.trim()) ?? 0.0;
+          final qty = double.tryParse(p.quantityController.text.trim());
+          final notes = p.notesController.text.trim();
+          final dateStr = DateFormat('yyyy-MM-dd').format(p.date);
+
+          if (compName.isNotEmpty || pPrice > 0) {
+            bool? remSlipImg;
+            bool? remSlipPdf;
+            if (i < widget.product.history.length) {
+              final orig = widget.product.history[i];
+              final hadSlipImg = orig.slipImageUrl != null && orig.slipImageUrl!.trim().isNotEmpty;
+              final hasSlipImg = p.slipImagePath != null && p.slipImagePath!.trim().isNotEmpty;
+              if (hadSlipImg && !hasSlipImg) remSlipImg = true;
+
+              final hadSlipPdf = orig.slipPdfUrl != null && orig.slipPdfUrl!.trim().isNotEmpty;
+              final hasSlipPdf = p.slipPdfPath != null && p.slipPdfPath!.trim().isNotEmpty;
+              if (hadSlipPdf && !hasSlipPdf) remSlipPdf = true;
+            }
+
+            final entryParams = CreatePriceCompareEntryParams(
+              productId: widget.product.id,
+              vendorName: compName.isNotEmpty ? compName : 'Vendor #${i + 1}',
+              purchasePrice: pPrice,
+              purchaseDate: dateStr,
+              sellingPrice: salePrice > 0 ? salePrice : null,
+              quantity: qty,
+              slipImagePath: p.slipImagePath != null && p.slipImagePath!.trim().isNotEmpty ? p.slipImagePath : null,
+              slipPdfPath: p.slipPdfPath != null && p.slipPdfPath!.trim().isNotEmpty ? p.slipPdfPath : null,
+              removeSlipImage: remSlipImg,
+              removeSlipPdf: remSlipPdf,
+              notes: notes.isNotEmpty ? notes : null,
+            );
+
+            if (i < _existingEntryIds.length) {
+              // Update existing entry
+              try {
+                await context.read<PriceCompareCubit>().updatePurchaseEntry(
+                  _existingEntryIds[i],
+                  entryParams,
+                );
+              } catch (_) {}
+            } else {
+              // Add new entry
+              try {
+                await context.read<PriceCompareCubit>().addPurchaseEntry(entryParams);
+              } catch (_) {}
+            }
+          }
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Comparison product '$name' saved successfully"),
-            backgroundColor: const Color(0xFF23B386),
-          ),
-        );
-        Navigator.pop(context);
+        if (!mounted) return;
+        Navigator.pop(context, true);
       } else {
-        final error =
-            context.read<PriceCompareCubit>().state.errorMessage ??
-            'Failed to save product';
+        if (!mounted) return;
+        final err = context.read<PriceCompareCubit>().state.errorMessage ?? 'Failed to update product';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
+          SnackBar(content: Text(err), backgroundColor: const Color(0xFFEF4444)),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving product: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFEF4444)),
         );
       }
     } finally {
@@ -602,7 +558,7 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
               children: [
                 const SizedBox(width: 36),
                 Text(
-                  'Add Product',
+                  'Edit Product',
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
@@ -644,7 +600,7 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Column(
                 children: [
-                  // Product Information Card
+                  // Product Information Card (Matches Add Product)
                   ProductInfoSection(
                     nameController: _nameController,
                     barcodeController: _barcodeController,
@@ -654,9 +610,9 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
                     selectedImagePath: _selectedImagePath,
                     selectedPdfPath: _selectedPdfPath,
                     onScanBarcode: () {
-                      setState(() {
-                        _barcodeController.text = '6281001234567';
-                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Opening scanner...')),
+                      );
                     },
                     onCamera: _handleCamera,
                     onGallery: _handleGallery,
@@ -667,7 +623,7 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Purchase Information Section
+                  // Purchase Information Section (Matches Add Product)
                   PurchaseInfoSection(
                     purchases: _purchases,
                     onAddCompany: _addAnotherCompany,
@@ -682,14 +638,9 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
             ),
           ),
 
-          // Bottom Action Buttons
+          // Bottom Action Buttons: [ Update Product ] & [ Cancel ]
           Container(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              MediaQuery.of(context).padding.bottom + 12,
-            ),
+            padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
             decoration: BoxDecoration(
               color: isDark ? AppColors.cardDark : Colors.white,
               border: Border(
@@ -701,7 +652,6 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Save Product Button
                 SizedBox(
                   width: double.infinity,
                   height: 48,
@@ -710,32 +660,23 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
                       backgroundColor: const Color(0xFF23B386),
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                     ),
                     onPressed: _isSaving ? null : _handleSave,
                     child: _isSaving
                         ? const SizedBox(
                             width: 22,
                             height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
                           )
                         : const Text(
-                            'Save Product',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            'Update Product',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                           ),
                   ),
                 ),
                 const SizedBox(height: 8),
 
-                // Cancel Button
                 SizedBox(
                   width: double.infinity,
                   height: 48,
@@ -746,17 +687,12 @@ class _AddProductBottomSheetState extends State<AddProductBottomSheet> {
                       side: BorderSide(
                         color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                     ),
                     onPressed: _isSaving ? null : () => Navigator.pop(context),
                     child: const Text(
                       'Cancel',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),

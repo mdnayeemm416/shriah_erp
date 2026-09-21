@@ -15,11 +15,7 @@ import 'dashboard/summary_screen.dart';
 import 'shop/shop_screen.dart';
 import 'wholesale/store_admin_screen.dart';
 import 'reports/reports_screen.dart';
-import 'sales_return/sales_return_screen.dart';
-import 'my_expenses/my_expenses_screen.dart';
 import 'price_compare/price_compare_screen.dart';
-import 'daily_closing/daily_closing_screen.dart';
-import 'profit_summary/profit_summary_screen.dart';
 import 'employees/employees_screen.dart';
 import 'settings/settings_screen.dart';
 import 'login/login_screen.dart';
@@ -48,11 +44,7 @@ class AppShellState extends State<AppShell> {
     ShopScreen(),
     StoreAdminScreen(),
     ReportsScreen(),
-    SalesReturnScreen(),
-    MyExpensesScreen(),
     PriceCompareScreen(),
-    DailyClosingScreen(),
-    ProfitSummaryScreen(),
     EmployeesScreen(),
     SettingsScreen(),
     SalesManagementScreen(),
@@ -69,7 +61,7 @@ class AppShellState extends State<AppShell> {
       if (authState is AuthAuthenticated) {
         final role = authState.user.role ?? '';
         if (role == 'sales') {
-          setState(() => _selectedIndex = 11); // SalesManagementScreen
+          setState(() => _selectedIndex = 7); // SalesManagementScreen
         }
       }
     });
@@ -148,7 +140,7 @@ class AppShellState extends State<AppShell> {
                             IconButton(
                               icon: const Icon(LucideIcons.settings),
                               onPressed: () {
-                                setState(() => _selectedIndex = 10);
+                                setState(() => _selectedIndex = 6);
                               },
                             ),
                           ],
@@ -295,15 +287,11 @@ class AppShellState extends State<AppShell> {
                 _buildSidebarItem(1, LucideIcons.store, context.t('nav.shop')),
                 _buildSidebarItem(2, LucideIcons.globe, context.t('nav.wholesale')),
                 _buildSidebarItem(3, LucideIcons.fileBarChart, context.t('nav.reports')),
-                _buildSidebarItem(4, LucideIcons.undo, 'Sales Return'),
-                _buildSidebarItem(5, LucideIcons.arrowUpCircle, 'My Wallet'),
-                _buildSidebarItem(6, LucideIcons.trendingUp, 'Price Compare'),
-                _buildSidebarItem(7, LucideIcons.calendarCheck, 'Daily Closing'),
-                _buildSidebarItem(8, LucideIcons.barChart, 'Profit Summary'),
-                _buildSidebarItem(9, LucideIcons.users, context.t('nav.employees')),
+                _buildSidebarItem(4, LucideIcons.trendingUp, 'Price Compare'),
+                _buildSidebarItem(5, LucideIcons.users, context.t('nav.employees')),
                 // Sales Management Admin only visible to admin role
-                if (isAdmin) _buildSidebarItem(12, LucideIcons.shieldAlert, 'Sales Management Admin'),
-                _buildSidebarItem(10, LucideIcons.settings, context.t('nav.settings')),
+                if (isAdmin) _buildSidebarItem(8, LucideIcons.shieldAlert, 'Sales Management Admin'),
+                _buildSidebarItem(6, LucideIcons.settings, context.t('nav.settings')),
               ],
             ),
           ),
@@ -498,7 +486,7 @@ class AppShellState extends State<AppShell> {
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1),
                   ),
                 ),
-                _buildDrawerItem(11, LucideIcons.userCheck, 'Sales Management', isDark),
+                _buildDrawerItem(7, LucideIcons.userCheck, 'Sales Management', isDark),
               ],
             ),
           ),
@@ -661,15 +649,11 @@ class AppShellState extends State<AppShell> {
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1),
                   ),
                 ),
-                _buildDrawerItem(4, LucideIcons.undo, 'Sales Return', isDark),
-                _buildDrawerItem(5, LucideIcons.arrowUpCircle, 'My Wallet', isDark),
-                _buildDrawerItem(6, LucideIcons.trendingUp, 'Price Compare', isDark),
-                _buildDrawerItem(7, LucideIcons.calendarCheck, 'Daily Closing', isDark),
-                _buildDrawerItem(8, LucideIcons.barChart, 'Profit Summary', isDark),
-                _buildDrawerItem(9, LucideIcons.users, context.t('nav.employees'), isDark),
+                _buildDrawerItem(4, LucideIcons.trendingUp, 'Price Compare', isDark),
+                _buildDrawerItem(5, LucideIcons.users, context.t('nav.employees'), isDark),
                 // Sales Management Admin only visible to admin role
-                if (isAdmin) _buildDrawerItem(12, LucideIcons.shieldAlert, 'Sales Management Admin', isDark),
-                _buildDrawerItem(10, LucideIcons.settings, context.t('nav.settings'), isDark),
+                if (isAdmin) _buildDrawerItem(8, LucideIcons.shieldAlert, 'Sales Management Admin', isDark),
+                _buildDrawerItem(6, LucideIcons.settings, context.t('nav.settings'), isDark),
               ],
             ),
           ),
@@ -690,7 +674,7 @@ class AppShellState extends State<AppShell> {
                 IconButton(
                   icon: const Icon(LucideIcons.globe, size: 20),
                   onPressed: () {
-                    setState(() => _selectedIndex = 10);
+                    setState(() => _selectedIndex = 6);
                     Navigator.pop(context);
                   },
                 ),

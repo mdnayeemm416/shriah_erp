@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import '../../../core/theme/app_colors.dart';
 import 'dashed_container.dart';
 
 class PriceCompareEmptyState extends StatelessWidget {
@@ -12,9 +13,11 @@ class PriceCompareEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return DashedContainer(
       borderRadius: 24,
-      color: const Color(0xFFCBD5E1),
+      color: isDark ? AppColors.borderDark : const Color(0xFFCBD5E1),
       dash: 6.0,
       gap: 5.0,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
@@ -26,8 +29,8 @@ class PriceCompareEmptyState extends StatelessWidget {
           Container(
             width: 76,
             height: 76,
-            decoration: const BoxDecoration(
-              color: Color(0xFFE8F7F2),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF134E48) : const Color(0xFFE8F7F2),
               shape: BoxShape.circle,
             ),
             child: const Center(
@@ -41,12 +44,12 @@ class PriceCompareEmptyState extends StatelessWidget {
           const SizedBox(height: 20),
 
           // Title
-          const Text(
+          Text(
             'No products available.',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF0F172A),
+              color: isDark ? AppColors.fgDark : const Color(0xFF0F172A),
             ),
           ),
           const SizedBox(height: 8),
@@ -56,9 +59,9 @@ class PriceCompareEmptyState extends StatelessWidget {
             child: RichText(
               textAlign: TextAlign.center,
               text: TextSpan(
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13.5,
-                  color: Color(0xFF64748B),
+                  color: isDark ? AppColors.mutedFgDark : const Color(0xFF64748B),
                   height: 1.5,
                 ),
                 children: [

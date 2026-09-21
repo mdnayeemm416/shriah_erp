@@ -630,7 +630,7 @@ class _AboutCard extends StatelessWidget {
                                   ? Colors.white
                                   : const Color(0xFF1E293B))),
                       const SizedBox(height: 3),
-                      Text('Flutter Client · v1.0.0',
+                      Text('Flutter Client · v1.0.3',
                           style: TextStyle(
                               fontSize: 12,
                               color: isDark

@@ -1,22 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import '../../../core/theme/app_colors.dart';
 import 'dashed_container.dart';
+import 'vendor_autocomplete_field.dart';
 
 class CompanyPurchaseEntry {
   final TextEditingController companyController;
   final TextEditingController priceController;
+  final TextEditingController quantityController;
+  final TextEditingController notesController;
   DateTime date;
   String? attachmentName;
+  String? slipImagePath;
+  String? slipPdfPath;
   bool isExpanded;
 
   CompanyPurchaseEntry({
     required this.companyController,
     required this.priceController,
+    TextEditingController? quantityController,
+    TextEditingController? notesController,
     DateTime? date,
     this.attachmentName,
+    this.slipImagePath,
+    this.slipPdfPath,
     this.isExpanded = true,
-  }) : date = date ?? DateTime.now();
+  })  : quantityController = quantityController ?? TextEditingController(),
+        notesController = notesController ?? TextEditingController(),
+        date = date ?? DateTime.now();
 }
 
 class PurchaseInfoSection extends StatelessWidget {
@@ -26,6 +38,7 @@ class PurchaseInfoSection extends StatelessWidget {
   final Function(int) onPickDate;
   final Function(int) onAttachMemo;
   final Function(int)? onRemoveCompany;
+  final List<String>? vendorSuggestions;
 
   const PurchaseInfoSection({
     super.key,
@@ -35,10 +48,13 @@ class PurchaseInfoSection extends StatelessWidget {
     required this.onPickDate,
     required this.onAttachMemo,
     this.onRemoveCompany,
+    this.vendorSuggestions,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -48,8 +64,8 @@ class PurchaseInfoSection extends StatelessWidget {
             Container(
               width: 38,
               height: 38,
-              decoration: const BoxDecoration(
-                color: Color(0xFFE8F7F2),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF064E3B).withValues(alpha: 0.4) : const Color(0xFFE8F7F2),
                 shape: BoxShape.circle,
               ),
               child: const Center(
@@ -60,18 +76,21 @@ class PurchaseInfoSection extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Purchase Information',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: isDark ? AppColors.fgDark : const Color(0xFF0F172A),
                   ),
                 ),
                 const SizedBox(height: 1),
                 Text(
                   '${purchases.length} ${purchases.length == 1 ? "company" : "companies"}',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppColors.mutedFgDark : const Color(0xFF64748B),
+                  ),
                 ),
               ],
             ),
@@ -87,9 +106,9 @@ class PurchaseInfoSection extends StatelessWidget {
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: isDark ? AppColors.cardDark : Colors.white,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0)),
             ),
             child: Column(
               children: [
@@ -108,8 +127,8 @@ class PurchaseInfoSection extends StatelessWidget {
                         Container(
                           width: 30,
                           height: 30,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFE8F7F2),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF064E3B).withValues(alpha: 0.4) : const Color(0xFFE8F7F2),
                             shape: BoxShape.circle,
                           ),
                           child: Center(
@@ -131,29 +150,46 @@ class PurchaseInfoSection extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Purchase #${index + 1}',
-                                style: const TextStyle(
+                                item.companyController.text.isNotEmpty
+                                    ? item.companyController.text
+                                    : 'Purchase #${index + 1}',
+                                style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A),
+                                  color: isDark ? AppColors.fgDark : const Color(0xFF0F172A),
                                 ),
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                item.companyController.text.isNotEmpty
-                                    ? item.companyController.text
-                                    : 'Tap to fill details',
-                                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                item.priceController.text.isNotEmpty
+                                    ? 'Purchase: ৳${item.priceController.text} • ${DateFormat("MMM dd, yyyy").format(item.date)}'
+                                    : (item.companyController.text.isNotEmpty
+                                        ? 'Purchase #${index + 1} • Tap to view'
+                                        : 'Tap to fill details'),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? AppColors.mutedFgDark : const Color(0xFF64748B),
+                                ),
                               ),
                             ],
                           ),
                         ),
 
+                        if (purchases.length > 1 && onRemoveCompany != null) ...[
+                          IconButton(
+                            icon: const Icon(LucideIcons.trash2, size: 16, color: Color(0xFFEF4444)),
+                            onPressed: () => onRemoveCompany!(index),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            splashRadius: 18,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         // Expand / Collapse Chevron
                         Icon(
                           item.isExpanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
                           size: 18,
-                          color: const Color(0xFF64748B),
+                          color: isDark ? AppColors.mutedFgDark : const Color(0xFF64748B),
                         ),
                       ],
                     ),
@@ -162,38 +198,35 @@ class PurchaseInfoSection extends StatelessWidget {
 
                 // Expanded Fields
                 if (item.isExpanded) ...[
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  Divider(
+                    height: 1,
+                    color: isDark ? AppColors.borderDark : const Color(0xFFF1F5F9),
+                  ),
                   Padding(
                     padding: const EdgeInsets.all(14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Company Name Field
-                        const Text(
+                        Text(
                           'Company Name',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E293B),
+                            color: isDark ? AppColors.fgDark : const Color(0xFF1E293B),
                           ),
                         ),
                         const SizedBox(height: 6),
-                        Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: TextField(
-                            controller: item.companyController,
-                            decoration: const InputDecoration(
-                              hintText: 'Search or type new company',
-                              hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            ),
-                          ),
+                        VendorAutocompleteField(
+                          controller: item.companyController,
+                          suggestions: vendorSuggestions,
+                          hintText: 'Search or type new company',
+                          onChanged: (_) {
+                            (context as Element).markNeedsBuild();
+                          },
+                          onSelected: (_) {
+                            (context as Element).markNeedsBuild();
+                          },
                         ),
                         const SizedBox(height: 14),
 
@@ -205,25 +238,26 @@ class PurchaseInfoSection extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'Purchase Price',
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1E293B),
+                                      color: isDark ? AppColors.fgDark : const Color(0xFF1E293B),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
                                   Container(
                                     height: 48,
                                     decoration: BoxDecoration(
-                                      color: Colors.white,
+                                      color: isDark ? AppColors.inputDark : Colors.white,
                                       borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      border: Border.all(color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0)),
                                     ),
                                     child: TextField(
                                       controller: item.priceController,
                                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      style: TextStyle(color: isDark ? AppColors.fgDark : const Color(0xFF0F172A)),
                                       decoration: const InputDecoration(
                                         hintText: '0.00',
                                         hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
@@ -242,12 +276,12 @@ class PurchaseInfoSection extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'Memo Date',
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1E293B),
+                                      color: isDark ? AppColors.fgDark : const Color(0xFF1E293B),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -256,18 +290,18 @@ class PurchaseInfoSection extends StatelessWidget {
                                     child: Container(
                                       height: 48,
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
+                                        color: isDark ? AppColors.inputDark : Colors.white,
                                         borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                        border: Border.all(color: isDark ? AppColors.borderDark : const Color(0xFFE2E8F0)),
                                       ),
                                       padding: const EdgeInsets.symmetric(horizontal: 14),
                                       alignment: Alignment.centerLeft,
                                       child: Text(
                                         DateFormat('MM/dd/yyyy').format(item.date),
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w500,
-                                          color: Color(0xFF1E293B),
+                                          color: isDark ? AppColors.fgDark : const Color(0xFF1E293B),
                                         ),
                                       ),
                                     ),
@@ -280,12 +314,12 @@ class PurchaseInfoSection extends StatelessWidget {
                         const SizedBox(height: 14),
 
                         // Memo (Image or PDF)
-                        const Text(
+                        Text(
                           'Memo (Image or PDF)',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E293B),
+                            color: isDark ? AppColors.fgDark : const Color(0xFF1E293B),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -293,20 +327,30 @@ class PurchaseInfoSection extends StatelessWidget {
                           onTap: () => onAttachMemo(index),
                           child: DashedContainer(
                             borderRadius: 16,
-                            color: const Color(0xFFCBD5E1),
-                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            color: isDark ? AppColors.borderDark : const Color(0xFFCBD5E1),
+                            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                             child: Center(
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(LucideIcons.camera, size: 18, color: Color(0xFF64748B)),
+                                  Icon(
+                                    item.slipPdfPath != null
+                                        ? LucideIcons.fileText
+                                        : LucideIcons.camera,
+                                    size: 18,
+                                    color: isDark ? AppColors.mutedFgDark : const Color(0xFF64748B),
+                                  ),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    item.attachmentName ?? 'Attach image or PDF',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: Color(0xFF475569),
+                                  Flexible(
+                                    child: Text(
+                                      item.attachmentName ?? 'Attach image or PDF',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark ? AppColors.mutedFgDark : const Color(0xFF475569),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ],

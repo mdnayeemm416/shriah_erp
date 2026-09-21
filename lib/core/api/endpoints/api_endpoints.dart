@@ -59,8 +59,15 @@ class ApiEndpoints {
   static String wholesaleSalesVisitById(String id) => '/sales/visits/$id';
   static const String salesCustomers = '/sales/customers';
 
-  // --- Wholesale Price Benchmark ---
+  // --- Wholesale Price Benchmark / Price Compare (API v1) ---
   static const String wholesalePriceCompares = '/wholesale/price-compares';
+  static const String priceCompare = '/price-compare';
+  static const String priceCompareProducts = '/price-compare/products';
+  static String priceCompareById(String id) => '/price-compare/$id';
+  static const String priceCompareEntries = '/price-compare/entries';
+  static const String priceComparePurchases = '/price-compare/purchases';
+  static String priceCompareEntryById(String id) => '/price-compare/entries/$id';
+  static const String priceCompareVendors = '/price-compare/vendors';
 
   // --- Wholesale Employees ---
   static const String wholesaleEmployees = '/wholesale/employees';
